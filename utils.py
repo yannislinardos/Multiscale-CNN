@@ -5,6 +5,7 @@ import numpy as np
 import pickle
 import gc
 from scipy import linalg
+import sympy as sp
 
 
 # loads the data from dataframe
@@ -148,6 +149,33 @@ def get_kernel_from_toeplitz(__matrix: np.ndarray, kernel_dim: int, __remove_zer
         __zero_cols = int(kernel_dim / 2)
         __new_matrix = np.delete(__new_matrix, slice(__zero_cols), 1)
         return __new_matrix[:, 0][0:kernel_dim]
+
+
+
+def get_symbol_matrix(rows: int, columns: int) -> (sp.Matrix, list):
+
+    __matrix = sp.Matrix.zeros(rows,columns)
+    __symbols = []
+    for __r in range(rows):
+        for __c in range(columns):
+            __s = sp.Symbol('X{},{}'.format(__r, __c))
+            __symbols.append(__s)
+            __matrix[__r, __c] = __s
+
+    return __matrix, __symbols
+
+
+def get_matrix_from_symbols(rows: int, columns: int, solutions: dict) -> np.ndarray:
+
+    __matrix = np.zeros(shape=(rows, columns))
+
+    for __r in range(rows):
+        for __c in range(columns):
+            __s = sp.Symbol('X{},{}'.format(__r, __c))
+            if __s in solutions.keys():
+                __matrix[__r][__c] = solutions[__s]
+
+    return __matrix
 
 
 
