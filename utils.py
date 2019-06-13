@@ -178,6 +178,24 @@ def get_matrix_from_symbols(rows: int, columns: int, solutions: dict) -> np.ndar
     return __matrix
 
 
+def strided_toeplitz(__kernel, __signal_size, __strides=2):
+
+    __rows = __signal_size//2
+    __kernel_counter = 0
+    __kernel_size = len(__kernel)
+    __matrix = np.zeros(shape=(__rows, __signal_size), dtype=object)
+    __col = 0
+    __prev_col = 0
+    for __r in range(__rows):
+        __kernel_counter = 0
+        while __kernel_counter < __kernel_size and __col < __signal_size:
+            __matrix[__r][__col] = __kernel[__kernel_counter%__kernel_size]
+            __kernel_counter = __kernel_counter+1
+            __col += 1
+        __prev_col += __strides
+        __col = __prev_col
+    return __matrix
+
 
 # if __name__ == "__main__":
 #

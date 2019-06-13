@@ -213,7 +213,8 @@ def downscale_kernel(__method: str,  __kernel: np.ndarray, __fine_scale: int, __
     return __new_kernel
 
 
-def upscale_kernel(__method: str,  __kernel: np.ndarray, __coarse_scale: int, __fine_scale: int, __zero_padding=True) -> np.ndarray:
+def upscale_kernel(__method: str,  __kernel: np.ndarray, __coarse_scale: int, __fine_scale: int, __zero_padding=True,
+                   P=None, R=None) -> np.ndarray:
 
     # create a kernel with unknown variables
     __num_of_unknowns = len(__kernel)
@@ -327,8 +328,8 @@ def downscale_avg_pooling(__method, __fine_scale, __coarse_scale):
 
         __m = __R@__K_p@__P
         # delete borders because they do not follow the pattern
-        __m = np.delete(__m, -1, 0)
-        __m = np.delete(__m, 0, 1)
+        # __m = np.delete(__m, -1, 0)
+        # __m = np.delete(__m, 0, 1)
 
         return __m
 
@@ -353,8 +354,10 @@ def upscale_avg_pooling(__method, __coarse_scale, __fine_scale):
         __K_p, __unknowns = utils.get_symbol_matrix( __fine_scale//2, __fine_scale)
 
         __eq = sp.Eq(__K_P, __R*__K_p*__P)
+        sp.pprint(__eq)
+        __solutions = sp.solve(__eq, __unknowns, particular=True, quick=True)
 
-        __solutions = sp.solve(__eq, __unknowns)
+        sp.pprint(__solutions)
 
         return utils.get_matrix_from_symbols(__K_p.shape[0], __K_p.shape[1], __solutions)
 
@@ -387,35 +390,77 @@ def round_expr(expr, num_digits):
     return expr.xreplace({n : round(n, num_digits) for n in expr.atoms(sp.Number)})
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
+#
+#     method = 'distance_weighting'
+#     coarse_scale = 10
+#     fine_scale = 20
+#     kernel = symbols('x1:%d' % 4)
+#     # avg_pool = symbols('y1:%d' % 4)
+#
+#     K_P = sp.Matrix(get_avg_pooling(coarse_scale))
+#     # K_P = sp.Matrix(utils.strided_toeplitz(avg_pool, coarse_scale))
+#
+#     P = sp.Matrix(get_prolongation(method, coarse_scale, fine_scale, __zero_padding=False))
+#     R = sp.Matrix(get_restriction(method, fine_scale // 2, coarse_scale // 2, __zero_padding=False))
+#
+#     # K_p, unknowns = utils.get_symbol_matrix(fine_scale//2, fine_scale)
+#
+#     K_p = sp.Matrix(utils.strided_toeplitz(kernel, fine_scale))
+#
+#     B = R * K_p * P
+#
+#     K_P.col_del(-1)
+#     B.col_del(0)
+#
+#     M = K_P - B
+#
+#     eq = sp.Eq(K_P, B)
+#
+#     solutions = sp.solve(eq, kernel)
+#
+#     equations = []
+#
+#     for r in range(M.shape[0]-2):
+#         for c in range(M.shape[1]):
+#             equation = sp.Eq(M[r, c])
+#
+#             if equation not in equations and type(equation) == sp.Eq:
+#                 equations.append(equation)
+#
 
 
-    # method = 'linear'
+
+
+    # M.col_del(0)
+    # K_P.col_del(0)
+
+    # eq = sp.Eq(K_P, B)
+    #
+
+    # equations = []
+    #
+    # for r in range(M.shape[0]):
+    #     for c in range(M.shape[1]):
+    #         equation = sp.Eq(M[r, c])
+    #
+    #         if equation not in equations and type(equation) == sp.Eq:
+    #             equations.append(equation)
+    #
+    #
+    # solutions = sp.solve(eq, kernel)
+
+
+    # method = 'distance_weighting'
     # coarse_scale = 10
     # fine_scale = 20
     #
-    # K_P = sp.Matrix(get_avg_pooling(coarse_scale))
+    # K_P = get_avg_pooling(coarse_scale)
     #
-    # P = sp.Matrix(get_prolongation(method, coarse_scale, fine_scale, __zero_padding=False))
-    # R = sp.Matrix(get_restriction(method, fine_scale // 2, coarse_scale // 2, __zero_padding=False))
+    # P = get_prolongation(method, coarse_scale, fine_scale, __zero_padding=False)
+    # R = get_restriction(method, fine_scale // 2, coarse_scale // 2, __zero_padding=False)
     #
-    # K_p, unknowns = utils.get_symbol_matrix(fine_scale // 2, fine_scale)
-    #
-    # eq = sp.Eq(K_P, R * K_p * P)
-    #
-    # solutions = sp.solve(eq, unknowns)
-
-
-    method = 'distance_weighting'
-    coarse_scale = 10
-    fine_scale = 20
-
-    K_P = get_avg_pooling(coarse_scale)
-
-    P = get_prolongation(method, coarse_scale, fine_scale, __zero_padding=False)
-    R = get_restriction(method, fine_scale // 2, coarse_scale // 2, __zero_padding=False)
-
-    K_p = get_avg_pooling(fine_scale)
+    # K_p = get_avg_pooling(fine_scale)
 
 
 
