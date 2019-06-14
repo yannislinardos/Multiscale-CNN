@@ -63,11 +63,11 @@ def load_model(path_to_model, path_to_weights):
 
 
 # tests a model and returns score
-def test_model(model, X, Y):
+def test_model(model, X, Y, loss='categorical_crossentropy'):
 
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    score = model.evaluate(X, Y, verbose=1, batch_size=3)[1]*100
-    print("%s: %.2f%%" % (model.metrics_names[1], score[1] * 100))
+    model.compile(loss=loss, optimizer='adam', metrics=['accuracy'])
+    score = model.evaluate(X, Y, verbose=1, batch_size=1)[1]*100
+    # print("%s: %.2f%%" % (model.metrics_names[1], score[1] * 100))
 
     return score
 

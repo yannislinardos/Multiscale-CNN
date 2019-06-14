@@ -68,9 +68,12 @@ class downscale_cnn:
 
             elif type(layer) is keras.layers.pooling.AveragePooling1D:
 
+                nodes = layer.output.shape[-1].value
+                pool_size = layer.pool_size[0]
+
                 if self.method == 'nearest_neighbor':
 
-                    new_model.add(layers.AveragePooling1D(pool_size=2))
+                    new_model.add(layers.AveragePooling1D(pool_size=pool_size))
 
                 elif self.method == 'linear':
 
@@ -78,7 +81,7 @@ class downscale_cnn:
                     dummy_bias = np.array([0,0,0])
                     new_weights = [utils.get_weights(new_kernels), dummy_bias]
 
-                    new_layer = layers.Conv1D(1, kernel_size=len(new_kernels[0]), activation='relu',
+                    new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
                                               input_shape=(48000, 1), padding='same', strides=2)
                     new_layer.set_weights(new_weights)
 
@@ -90,7 +93,7 @@ class downscale_cnn:
                     dummy_bias = np.array([0,0,0])
                     new_weights = [utils.get_weights(new_kernels), dummy_bias]
 
-                    new_layer = layers.Conv1D(1, kernel_size=len(new_kernels[0]), activation='relu',
+                    new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
                                               input_shape=(48000, 1), padding='same', strides=2)
                     new_layer.set_weights(new_weights)
 
