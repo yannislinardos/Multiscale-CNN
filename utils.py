@@ -67,52 +67,59 @@ def test_model(model, X, Y, loss='categorical_crossentropy'):
 
     model.compile(loss=loss, optimizer='adam', metrics=['accuracy'])
     score = model.evaluate(X, Y, verbose=1, batch_size=1)[1]*100
-    # print("%s: %.2f%%" % (model.metrics_names[1], score[1] * 100))
+    print("%s: %.2f%%" % (model.metrics_names[1], score* 100))
 
     return score
 
 
 '''
-In weights with biases:
-[] gives weights for 0 or biases for 1
-[][] gives the weights of a node
-[][][] denotes dimension of kernel, so we always put 0
+In weights with biases: 0 is weights, 1 is biases
+
+For weights
+[] gives previous nodes
+[][] denotes dimension of kernel, so we always put 0
 [][][][] denotes the weight itself
 '''
 
-
-# the function gete the weights of a 1D convolutional layer and returns a list of the conv kernels (as lists)
+# the function gets the weights of a 1D convolutional layer and returns a list of the conv kernels (as lists)
 # the biases are ignored
-def get_kernels(weights) -> np.ndarray:
+def get_kernels(weights: np.ndarray) -> np.ndarray:
 
-    # to work even when we do not give the the biases
-    if type(weights) is list:
-        pass
-    elif type(weights) is np.ndarray:
-        weights = [weights, 1]
+    all_kernels = []
+    # loop over nodes of current layer
+    for current_node in range(len(weights[0][0])):
 
-    kernels = []
+        current_node_kernels = []
 
-    # loop over layer size
-    for node in range(len(weights[0][0][0])):
-        # loop over kernel size
-        kernel = []
-        for kernel_entry in range(len(weights[0])):
-            weight = weights[0][kernel_entry][0][node]
-            kernel.append(weight)
-        kernels.append(kernel)
+        # loop over nodes of previous layer
+        for previous_node in range(len(weights[0])):
 
-    return np.array(kernels)
+            # loop over kernel size
+            kernel = []
+            for kernel_entry in range(len(weights)):
+                weight = weights[kernel_entry][previous_node][current_node]
+                kernel.append(weight)
+
+            current_node_kernels.append(kernel)
+
+        all_kernels.append(current_node_kernels)
+
+    return np.array(all_kernels)
 
 
 # it gets a list of kernels and returns the weights to be put back in the model (not including biases)
-def get_weights(kernels):
+def get_weights(kernels: np.ndarray) -> np.ndarray:
 
-    weights = np.ndarray(shape=(len(kernels[0]), 1, len(kernels)), dtype=np.float32)
+    weights = np.ndarray(shape=(tuple(np.flip(kernels.shape))), dtype=np.float32)
 
-    for kernel_index in range(len(kernels)):
-        for element_index in range(len(kernels[kernel_index])):
-            weights[element_index][0][kernel_index] = kernels[kernel_index][element_index]
+    for current_node in range(kernels.shape[0]):
+
+        # loop over nodes of previous layer
+        for previous_node in range(kernels.shape[1]):
+
+            # loop over kernel size
+            for element_index in range(kernels.shape[2]):
+                weights[element_index][previous_node][current_node] = kernels[current_node][previous_node][element_index]
 
     return weights
 
@@ -198,6 +205,17 @@ def strided_toeplitz(__kernel, __signal_size, __strides=2):
 
 
 # if __name__ == "__main__":
+
+    # model = load_model('Models/Model_24KHz_80%.yaml', 'Models/Model_24KHz_80%.h5')
+    #
+    # weights0 = model.layers[0].get_weights()[0]
+    # weights1 = model.layers[1].get_weights()[0]
+    #
+    # print(np.array_equal(weights0, get_weights(get_kernels(weights0))))
+    #
+    # print(np.array_equal(weights1, get_weights(get_kernels(weights1))))
+
+
 #
 #
 #     matrix_dim = 8

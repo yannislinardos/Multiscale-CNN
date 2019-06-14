@@ -23,23 +23,33 @@ class downscale_cnn:
 
         new_model = models.Sequential()
 
+        i = 0
+        first_layer = True
         for layer in self.old_model.layers:
-
+            print('we are in layer {}'.format(i))
+            i += 1
             if type(layer) is keras.layers.convolutional.Conv1D:
 
                 biases = layer.get_weights()[1]
                 old_kernels = utils.get_kernels(layer.get_weights())
 
-                nodes = layer.kernel.kernel.shape[2].value
+                nodes = layer.kernel.shape[2].value
 
                 if self.method == 'nearest_neighbor':
 
-                    new_kernels = self.nearest_neighbor(old_kernels)
+                    new_kernels = self.nearest_neighbor(self, old_kernels)
                     new_weights = [utils.get_weights(new_kernels), biases]
 
-                    new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
-                                              input_shape=(48000, 1), padding='same')
-                    new_layer.set_weights(new_weights)
+
+                    if first_layer:
+                        new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation=layer.activation,
+                                              input_shape=(48000, 1), padding='same', weights=new_weights)
+                        first_layer = False
+
+                    elif not  first_layer:
+                        new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation=layer.activation,
+                                              padding='same', weights=new_weights)
+
 
                     new_model.add(new_layer)
 
@@ -49,7 +59,7 @@ class downscale_cnn:
                     new_weights = [utils.get_weights(new_kernels), biases]
 
                     new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
-                                              input_shape=(48000, 1), padding='same')
+                                              input_shape=(48000, 1), padding='same', weights=new_weights)
                     new_layer.set_weights(new_weights)
 
                     new_model.add(new_layer)
@@ -111,6 +121,13 @@ class downscale_cnn:
 
                 new_model.add(layer)
 
+        model_yaml = new_model.to_yaml()
+        with open("Models/Multiscaled/{}.yaml".format(self.new_model_name), "w") as yaml_file:
+            yaml_file.write(model_yaml)
+
+        # serialize weights to HDF5
+        new_model.save_weights("Models/Multiscaled/{}.h5".format(self.new_model_name))
+
 
     @staticmethod
     def nearest_neighbor(self, old_kernels):
@@ -138,7 +155,7 @@ class downscale_cnn:
 
             elif (old_kernel_size + 1) / 2 % 2 == 1:
 
-                new_kernel_size = (2 * (old_kernel_size + 3) / 4 - 1)
+                new_kernel_size = (2 * (old_kernel_size + 3) // 4 - 1)
 
                 new_kernel = np.ndarray(shape=(new_kernel_size))
 
@@ -157,7 +174,7 @@ class downscale_cnn:
 
 
     @staticmethod
-    def linear(self, old_kernels):
+    def linear(old_kernels):
 
         new_kernels = []
 
@@ -183,7 +200,7 @@ class downscale_cnn:
 
             elif (old_kernel_size + 1) / 2 % 2 == 1:
 
-                new_kernel_size = (old_kernel_size - 1) / 2
+                new_kernel_size = (old_kernel_size - 1) // 2
 
                 new_kernel = np.ndarray(shape=(new_kernel_size))
 
@@ -249,3 +266,11 @@ class downscale_cnn:
             new_kernels.append(new_kernel)
 
         return new_kernels
+
+
+
+if __name__ == '__main__':
+
+    down = downscale_cnn('nearest_neighbor', 'Model_24KHz_87%_meanpooling', 'test')
+
+    down.downscale()
