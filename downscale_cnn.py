@@ -4,11 +4,14 @@ import keras
 from keras import models
 from keras import layers
 import numpy as np
+import to_fully_conv
+from keras.layers import Lambda
+from keras import backend as K
 
 
 class downscale_cnn:
 
-    def __init__(self, method: str, old_model: str, new_model: str):
+    def __init__(self, method: str, old_model: str, new_model: str, avg_pool=False):
 
         self.method = method
         self.old_model_name = old_model
@@ -16,6 +19,7 @@ class downscale_cnn:
 
         self.old_model = utils.load_model('Models/{}.yaml'.format(old_model), 'Models/{}.h5'.format(old_model))
 
+        self.avg_pool = avg_pool
 
 
 
@@ -23,16 +27,15 @@ class downscale_cnn:
 
         new_model = models.Sequential()
 
-        i = 0
+        # model_all_conv = to_fully_conv.to_fully_conv(self.old_model)
+
         first_layer = True
         for layer in self.old_model.layers:
-            print('we are in layer {}'.format(i))
-            i += 1
+
             if type(layer) is keras.layers.convolutional.Conv1D:
 
                 biases = layer.get_weights()[1]
                 old_kernels = utils.get_kernels(layer.get_weights()[0])
-
                 nodes = layer.kernel.shape[2].value
 
                 if self.method == 'nearest_neighbor':
@@ -54,30 +57,41 @@ class downscale_cnn:
 
                 elif self.method == 'linear':
 
-                    new_kernels = self.linear(old_kernels)
+                    new_kernels = self.linear(self, old_kernels)
+
                     new_weights = [utils.get_weights(new_kernels), biases]
 
-                    new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
-                                              input_shape=(48000, 1), padding='same', weights=new_weights)
-                    new_layer.set_weights(new_weights)
+                    if first_layer:
+                        new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                                  input_shape=(48000, 1), padding='same', weights=new_weights)
+                        first_layer = False
+
+                    elif not first_layer:
+                        new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                                  padding='same', weights=new_weights)
 
                     new_model.add(new_layer)
 
                 elif self.method == 'distance_weighting':
 
-                    new_kernels = self.distance_weighting(old_kernels)
+                    new_kernels = self.distance_weighting(self, old_kernels)
                     new_weights = [utils.get_weights(new_kernels), biases]
 
-                    new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
-                                              input_shape=(48000, 1), padding='same')
-                    new_layer.set_weights(new_weights)
+                    if first_layer:
+                        new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                                  input_shape=(48000, 1), padding='same', weights=new_weights)
+                        first_layer = False
+
+                    elif not first_layer:
+                        new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                                  padding='same', weights=new_weights)
 
                     new_model.add(new_layer)
 
 
             elif type(layer) is keras.layers.pooling.AveragePooling1D:
 
-                nodes = layer.output.shape[-1].value
+                nodes = layer.get_output_at(0).shape[-1].value
                 pool_size = layer.pool_size[0]
 
                 if self.method == 'nearest_neighbor':
@@ -86,46 +100,101 @@ class downscale_cnn:
 
                 elif self.method == 'linear':
 
-                    new_kernels = [[3/4,-1/4,-1/4]]
-                    dummy_bias = np.array([0,0,0])
-                    new_weights = [utils.get_weights(new_kernels), dummy_bias]
+                    if self.avg_pool is True:
+                        new_model.add(layers.AveragePooling1D(pool_size=pool_size))
 
-                    new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
-                                              input_shape=(48000, 1), padding='same', strides=2)
-                    new_layer.set_weights(new_weights)
+                    else:
+                        new_kernels = self.down_scale_avg_pooling(nodes, [3/4,-1/4,-1/4])
+                        dummy_bias = np.zeros(nodes)
+                        new_weights = [utils.get_weights(new_kernels), dummy_bias]
 
-                    new_model.add(new_layer)
+                        new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[-1], activation='linear'
+                                                  , padding='same', strides=2, weights=new_weights)
+
+                        new_model.add(new_layer)
 
                 elif self.method == 'distance_weighting':
 
-                    new_kernels = [[-1/4,1/2,3/4]]
-                    dummy_bias = np.array([0,0,0])
-                    new_weights = [utils.get_weights(new_kernels), dummy_bias]
+                    if self.avg_pool is True:
+                        new_model.add(layers.AveragePooling1D(pool_size=pool_size))
 
-                    new_layer = layers.Conv1D(nodes, kernel_size=len(new_kernels[0]), activation='relu',
-                                              input_shape=(48000, 1), padding='same', strides=2)
-                    new_layer.set_weights(new_weights)
+                    else:
+                        new_kernels = self.down_scale_avg_pooling(nodes, [-1/4,1/2,3/4])
+                        dummy_bias = np.zeros(nodes)
+                        new_weights = [utils.get_weights(new_kernels), dummy_bias]
 
-                    new_model.add(new_layer)
+                        new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[-1], activation='relu',
+                                                  padding='same', strides=2, weights=new_weights)
+                        new_model.add(new_layer)
+
+        # new_model.add(Lambda(lambda x: K.batch_flatten(x)))
+
+            elif type(layer) is keras.layers.Flatten:
+
+                new_model.add(layers.Flatten())
+                f_dim = layer.input_shape
+
+            elif type(layer) is keras.layers.Dense:
+
+                original_shape = layer.get_weights()[0].shape
+                output_dim = layer.get_weights()[1].shape[0]
+                shape = (f_dim[1], f_dim[2], output_dim)
+                weights, biases = layer.get_weights()
+
+                old_conv_weights = weights.reshape(shape)
+
+                old_kernels = utils.get_kernels(old_conv_weights)
+
+                if self.method == 'nearest_neighbor':
+
+                    new_kernels = self.nearest_neighbor(self, old_kernels)
+                    new_kernels = self.pad_zeros(new_kernels, old_kernels.shape[-1])
+                    new_conv_weights = utils.get_weights(new_kernels)
+                    new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
+
+                    new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
+                elif self.method == 'linear':
+
+                    new_kernels = self.linear(self, old_kernels)
+                    new_kernels = self.pad_zeros(new_kernels, old_kernels.shape[-1])
+                    new_conv_weights = utils.get_weights(new_kernels)
+                    new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
+
+                    new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
 
-            elif type(layer) is keras.layers.pooling.Flatten:
+                elif self.method == 'distance_weighting':
 
-                new_model.add(keras.layers.pooling.Flatten)
+                    new_kernels = self.distance_weighting(self, old_kernels)
+                    new_kernels = self.pad_zeros(new_kernels, old_kernels.shape[-1])
+                    new_conv_weights = utils.get_weights(new_kernels)
+                    new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
+
+                    new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
 
-            elif type(layer) is keras.layers.core.Dense:
+        X, Y = utils.load_data('Dataframes/Testing12.pickle')
+        score = utils.test_model(new_model, X, Y)
+        print(self.method)
+        print("%s: %.2f%%" % (new_model.metrics_names[1], score))
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        # model_yaml = new_model.to_yaml()
+        # with open("Models/Multiscaled/{}.yaml".format(self.new_model_name), "w") as yaml_file:
+        #     yaml_file.write(model_yaml)
+        #
+        # # serialize weights to HDF5
+        # new_model.save_weights("Models/Multiscaled/{}.h5".format(self.new_model_name))
 
 
 
-                new_model.add(layer)
+    def down_scale_avg_pooling(self, nodes, kernel):
 
-        model_yaml = new_model.to_yaml()
-        with open("Models/Multiscaled/{}.yaml".format(self.new_model_name), "w") as yaml_file:
-            yaml_file.write(model_yaml)
+        arr = np.zeros(shape=(nodes, nodes, len(kernel)))
 
-        # serialize weights to HDF5
-        new_model.save_weights("Models/Multiscaled/{}.h5".format(self.new_model_name))
+        arr[:][:] = np.array(kernel)
+
+        return arr
 
 
     @staticmethod
@@ -143,36 +212,166 @@ class downscale_cnn:
 
                 old_kernel = old_kernels[current_node][prev_node]
 
+                if old_kernel_size % 2 == 1:
 
-                if (old_kernel_size + 1) / 2 % 2 == 0:
+                    if ((old_kernel_size + 1) / 2) % 2 == 0:
 
-                    new_kernel_size = (2 * (old_kernel_size + 1) / 4 - 1)
+                        new_kernel_size = (2 * (old_kernel_size + 1) // 4 - 1)
 
-                    new_kernel = np.ndarray(shape=(new_kernel_size))
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
 
-                    new_kernel[0] = 0.5 * old_kernel[0]
+                        new_kernel[0] = 0.5 * old_kernel[0]
 
-                    j = 0
-                    for i in range(1, new_kernel_size - 1):
-                        new_kernel[i] = 0.5 * old_kernel[j] + old_kernel[j + 1] + 0.5 * old_kernel[j + 2]
-                        j += 2
+                        j = 0
+                        for i in range(1, new_kernel_size - 1):
+                            new_kernel[i] = 0.5 * old_kernel[j] + old_kernel[j + 1] + 0.5 * old_kernel[j + 2]
+                            j += 2
 
-                    new_kernel[-1] = 0.5 * old_kernel[-1]
+                        new_kernel[-1] = 0.5 * old_kernel[-1]
 
-                elif (old_kernel_size + 1) / 2 % 2 == 1:
+                        current_node_new_kernels.append(new_kernel)
 
-                    new_kernel_size = (2 * (old_kernel_size + 3) // 4 - 1)
+                    elif ((old_kernel_size + 1) / 2) % 2 == 1:
 
-                    new_kernel = np.ndarray(shape=(new_kernel_size))
+                        new_kernel_size = (2 * (old_kernel_size + 3) // 4 - 1)
 
-                    new_kernel[0] = old_kernel[0] + 0.5 * old_kernel[1]
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
 
-                    j = 1
-                    for i in range(1, new_kernel_size - 1):
-                        new_kernel[i] = 0.5 * old_kernel[j] + old_kernel[j + 1] + 0.5 * old_kernel[j + 2]
-                        j += 2
+                        new_kernel[0] = old_kernel[0] + 0.5 * old_kernel[1]
 
-                    new_kernel[-1] = old_kernel[-1] + 0.5 * old_kernel[-2]
+                        j = 1
+                        for i in range(1, new_kernel_size - 1):
+                            new_kernel[i] = 0.5 * old_kernel[j] + old_kernel[j + 1] + 0.5 * old_kernel[j + 2]
+                            j += 2
+
+                        new_kernel[-1] = old_kernel[-1] + 0.5 * old_kernel[-2]
+
+                        current_node_new_kernels.append(new_kernel)
+
+                elif old_kernel_size % 2 == 0:
+
+                    if ((old_kernel_size) / 2) % 2 == 0:
+
+                        new_kernel_size = (2 * (old_kernel_size) // 4 - 1)
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = 0.5 * old_kernel[0]
+
+                        j = 0
+                        for i in range(1, new_kernel_size - 1):
+                            new_kernel[i] = 0.5 * old_kernel[j] + old_kernel[j + 1] + 0.5 * old_kernel[j + 2]
+                            j += 2
+
+                        new_kernel[-1] = 0.5 * old_kernel[-1]
+
+                        current_node_new_kernels.append(new_kernel)
+
+                    elif ((old_kernel_size) / 2) % 2 == 1:
+
+                        new_kernel_size = (2 * (old_kernel_size + 2) // 4 - 1)
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = old_kernel[0] + 0.5 * old_kernel[1]
+
+                        j = 1
+                        for i in range(1, new_kernel_size - 1):
+                            new_kernel[i] = 0.5 * old_kernel[j] + old_kernel[j + 1] + 0.5 * old_kernel[j + 2]
+                            j += 2
+
+                        new_kernel[-1] = old_kernel[-1] + 0.5 * old_kernel[-2]
+
+                        current_node_new_kernels.append(new_kernel)
+
+            all_new_kernels.append(current_node_new_kernels)
+
+        return np.array(all_new_kernels)
+
+
+    @staticmethod
+    def linear(self, old_kernels):
+
+        all_new_kernels = []
+
+        old_kernel_size = old_kernels.shape[2]
+
+        for current_node in range(old_kernels.shape[0]):
+
+            current_node_new_kernels = []
+
+            for prev_node in range(old_kernels.shape[1]):
+                old_kernel = old_kernels[current_node][prev_node]
+
+                if old_kernel_size % 2 == 1:
+
+                    if (old_kernel_size + 1) / 2 % 2 == 0:
+
+                        new_kernel_size =  (old_kernel_size - 3) // 2
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = -0.5 * old_kernel[-1]
+                        new_kernel[1] = 1.5 * old_kernel[-1]-0.5 * old_kernel[-3]
+
+                        j = 2
+                        for i in range(2, new_kernel_size - 2):
+                            new_kernel[i] = old_kernel[-j] + 1.5*old_kernel[-j -1] - 0.5 * old_kernel[-j -3]
+                            j += 2
+
+                        new_kernel[-1] = old_kernel[1] + 1.5 * old_kernel[2]
+
+                    elif (old_kernel_size + 1) / 2 % 2 == 1:
+
+                        new_kernel_size = (old_kernel_size - 1) // 2
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = - 0.5 * old_kernel[-2]
+
+                        j = 1
+                        for i in range(1, new_kernel_size - 2):
+                            new_kernel[i] = old_kernel[-j] + 1.5*old_kernel[-j -1] - 0.5 * old_kernel[-j -3]
+                            j += 2
+
+                        new_kernel[-2] = 0.5 * old_kernel[1] + old_kernel[2]
+                        new_kernel[-1] = old_kernel[0]
+
+
+                elif old_kernel_size % 2 == 0:
+
+                    if (old_kernel_size) / 2 % 2 == 0:
+
+                        new_kernel_size = (old_kernel_size - 2) // 2
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = -0.5 * old_kernel[-1]
+                        new_kernel[1] = 1.5 * old_kernel[-1] - 0.5 * old_kernel[-3]
+
+                        j = 2
+                        for i in range(2, new_kernel_size - 2):
+                            new_kernel[i] = old_kernel[-j] + 1.5 * old_kernel[-j - 1] - 0.5 * old_kernel[-j - 3]
+                            j += 2
+
+                        new_kernel[-1] = old_kernel[1] + 1.5 * old_kernel[2]
+
+                    elif (old_kernel_size) / 2 % 2 == 1:
+
+                        new_kernel_size = (old_kernel_size) // 2
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = - 0.5 * old_kernel[-2]
+
+                        j = 1
+                        for i in range(1, new_kernel_size - 2):
+                            new_kernel[i] = old_kernel[-j] + 1.5 * old_kernel[-j - 1] - 0.5 * old_kernel[-j - 3]
+                            j += 2
+
+                        new_kernel[-2] = 0.5 * old_kernel[1] + old_kernel[2]
+                        new_kernel[-1] = old_kernel[0]
+
 
                 current_node_new_kernels.append(new_kernel)
 
@@ -182,103 +381,123 @@ class downscale_cnn:
 
 
     @staticmethod
-    def linear(old_kernels):
-
-        new_kernels = []
-
-        old_kernel_size = old_kernels.shape[1]
-
-        for old_kernel in old_kernels:
-
-            if (old_kernel_size + 1) / 2 % 2 == 0:
-
-                new_kernel_size =  (old_kernel_size - 3) / 2
-
-                new_kernel = np.ndarray(shape=(new_kernel_size))
-
-                new_kernel[0] = -0.5 * old_kernel[-1]
-                new_kernel[1] = 1.5 * old_kernel[-1]-0.5 * old_kernel[-3]
-
-                j = 2
-                for i in range(2, new_kernel_size - 2):
-                    new_kernel[i] = old_kernel[-j] + 1.5*old_kernel[-j -1] - 0.5 * old_kernel[-j -3]
-                    j += 2
-
-                new_kernel[-1] = old_kernel[1] + 1.5 * old_kernel[2]
-
-            elif (old_kernel_size + 1) / 2 % 2 == 1:
-
-                new_kernel_size = (old_kernel_size - 1) // 2
-
-                new_kernel = np.ndarray(shape=(new_kernel_size))
-
-                new_kernel[0] = - 0.5 * old_kernel[-2]
-
-                j = 1
-                for i in range(1, new_kernel_size - 2):
-                    new_kernel[i] = old_kernel[-j] + 1.5*old_kernel[-j -1] - 0.5 * old_kernel[-j -3]
-                    j += 2
-
-                new_kernel[-2] = 0.5 * old_kernel[1] + old_kernel[2]
-                new_kernel[-1] = old_kernel[0]
-
-            new_kernels.append(new_kernel)
-
-        return new_kernels
-
-
-    @staticmethod
     def distance_weighting(self, old_kernels):
 
-        new_kernels = []
+        all_new_kernels = []
 
-        old_kernel_size = old_kernels.shape[1]
+        old_kernel_size = old_kernels.shape[2]
 
-        for old_kernel in old_kernels:
+        for current_node in range(old_kernels.shape[0]):
 
-            if (old_kernel_size + 1) / 2 % 2 == 0:
+            current_node_new_kernels = []
 
-                new_kernel_size = (old_kernel_size - 5) / 2
+            for prev_node in range(old_kernels.shape[1]):
+                old_kernel = old_kernels[current_node][prev_node]
 
-                new_kernel = np.ndarray(shape=(new_kernel_size))
+                if old_kernel_size % 2 == 1:
 
-                new_kernel[0] = 3/8 * old_kernel[-1]
-                new_kernel[1] = 3/4 * old_kernel[-1] + old_kernel[-2] + 3/8 * old_kernel[-3]
+                    if (old_kernel_size + 1) / 2 % 2 == 0:
 
-                j = 1
-                for i in range(2, new_kernel_size - 2):
-                    new_kernel[i] = -1/8*old_kernel[-j] + 3/4 * old_kernel[-j - 3] + old_kernel[-j - 4] + 3/8 * old_kernel[-j-5]
-                    j += 2
+                        new_kernel_size = (old_kernel_size - 5) // 2
 
-                new_kernel[-2] = -1/8* old_kernel[2] + 3/4 * old_kernel[0]
-                new_kernel[-1] = -1/8*old_kernel[0]
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
 
-            elif (old_kernel_size + 1) / 2 % 2 == 1:
+                        new_kernel[0] = 3/8 * old_kernel[-1]
+                        new_kernel[1] = 3/4 * old_kernel[-1] + old_kernel[-2] + 3/8 * old_kernel[-3]
 
-                new_kernel_size = (old_kernel_size - 3) / 2
+                        j = 1
+                        for i in range(2, new_kernel_size - 2):
+                            new_kernel[i] = -1/8*old_kernel[-j] + 3/4 * old_kernel[-j - 3] + old_kernel[-j - 4] + 3/8 * old_kernel[-j-5]
+                            j += 2
 
-                new_kernel = np.ndarray(shape=(new_kernel_size))
+                        new_kernel[-2] = -1/8* old_kernel[2] + 3/4 * old_kernel[0]
+                        new_kernel[-1] = -1/8*old_kernel[0]
 
-                new_kernel[0] = -old_kernel[-1] + 3/8 * old_kernel[-2]
-                new_kernel[1] = 3/4 * old_kernel[-2] + old_kernel[-3] + 3/8 * old_kernel[-4]
+                    elif (old_kernel_size + 1) / 2 % 2 == 1:
+
+                        new_kernel_size = (old_kernel_size - 3) // 2
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = -old_kernel[-1] + 3/8 * old_kernel[-2]
+                        new_kernel[1] = 3/4 * old_kernel[-2] + old_kernel[-3] + 3/8 * old_kernel[-4]
 
 
-                j = 2
-                for i in range(1, new_kernel_size - 2):
-                    new_kernel[i] = -1/8*old_kernel[-j] + 3/4 * old_kernel[-j - 3] + old_kernel[-j - 4] + 3/8 * old_kernel[-j-5]
-                    j += 2
+                        j = 2
+                        for i in range(1, new_kernel_size - 2):
+                            new_kernel[i] = -1/8*old_kernel[-j] + 3/4 * old_kernel[-j - 3] + old_kernel[-j - 4] + 3/8 * old_kernel[-j-5]
+                            j += 2
 
-                new_kernel[-2] = - 1/8 * old_kernel[3] + 3/4 * old_kernel[1] + old_kernel[0]
-                new_kernel[-1] = -1/8*old_kernel[1]
+                        new_kernel[-2] = - 1/8 * old_kernel[3] + 3/4 * old_kernel[1] + old_kernel[0]
+                        new_kernel[-1] = -1/8*old_kernel[1]
 
-            new_kernels.append(new_kernel)
+                elif old_kernel_size % 2 == 0:
 
-        return new_kernels
+                    if (old_kernel_size) / 2 % 2 == 0:
 
+                        new_kernel_size = (old_kernel_size - 4) // 2
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = 3 / 8 * old_kernel[-1]
+                        new_kernel[1] = 3 / 4 * old_kernel[-1] + old_kernel[-2] + 3 / 8 * old_kernel[-3]
+
+                        j = 1
+                        for i in range(2, new_kernel_size - 2):
+                            new_kernel[i] = -1 / 8 * old_kernel[-j] + 3 / 4 * old_kernel[-j - 3] + old_kernel[
+                                -j - 4] + 3 / 8 * old_kernel[-j - 5]
+                            j += 2
+
+                        new_kernel[-2] = -1 / 8 * old_kernel[2] + 3 / 4 * old_kernel[0]
+                        new_kernel[-1] = -1 / 8 * old_kernel[0]
+
+                    elif (old_kernel_size) / 2 % 2 == 1:
+
+                        new_kernel_size = (old_kernel_size - 2) // 2
+
+                        new_kernel = np.ndarray(shape=(new_kernel_size))
+
+                        new_kernel[0] = -old_kernel[-1] + 3 / 8 * old_kernel[-2]
+                        new_kernel[1] = 3 / 4 * old_kernel[-2] + old_kernel[-3] + 3 / 8 * old_kernel[-4]
+
+                        j = 2
+                        for i in range(1, new_kernel_size - 2):
+                            new_kernel[i] = -1 / 8 * old_kernel[-j] + 3 / 4 * old_kernel[-j - 3] + old_kernel[
+                                -j - 4] + 3 / 8 * old_kernel[-j - 5]
+                            j += 2
+
+                        new_kernel[-2] = - 1 / 8 * old_kernel[3] + 3 / 4 * old_kernel[1] + old_kernel[0]
+                        new_kernel[-1] = -1 / 8 * old_kernel[1]
+
+                current_node_new_kernels.append(new_kernel)
+
+            all_new_kernels.append(current_node_new_kernels)
+
+        return np.array(all_new_kernels)
+
+
+    def pad_zeros(self, new_kernels, old_kernel_size):
+
+            new_kernel_size = new_kernels.shape[-1]
+
+            zeros = old_kernel_size//2 - new_kernel_size
+
+            new_kernels_padded = np.ndarray(shape=(new_kernels.shape[0], new_kernels.shape[1], new_kernels.shape[2] + zeros))
+
+            for i in range(new_kernels.shape[0]):
+                for j in range(new_kernels.shape[1]):
+                    new_kernels_padded[i][j] = np.append(new_kernels[i][j], np.zeros(zeros))
+
+            return new_kernels_padded
 
 
 if __name__ == '__main__':
 
-    down = downscale_cnn('nearest_neighbor', 'Model_24KHz_87%_meanpooling', 'test')
 
-    down.downscale()
+    scores = {}
+
+    for method in ['nearest_neighbor', 'linear', 'distance_weighting']:
+
+        down = downscale_cnn(method, 'Model_24KHz_97%_meanPooling', 'test', True)
+
+        down.downscale()
