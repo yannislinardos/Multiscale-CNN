@@ -216,13 +216,22 @@ def downscale_kernel(__method: str,  __kernel: np.ndarray, __fine_scale: int, __
 def upscale_kernel(__method: str,  __kernel: np.ndarray, __coarse_scale: int, __fine_scale: int, __zero_padding=True,
                    P=None, R=None) -> np.ndarray:
 
+
+    if P is None and R is None:
+        __P = sp.Matrix(
+            get_prolongation(__method, __coarse_scale, __fine_scale, __zero_padding=False, __kernel_size=len(__kernel)))
+        __R = sp.Matrix(
+            get_restriction(__method, __fine_scale, __coarse_scale, __zero_padding=False, __kernel_size=len(__kernel)))
+
+    else:
+        __P, __R = P, R
+
+
     # create a kernel with unknown variables
     __num_of_unknowns = len(__kernel)
     __unknowns = symbols('x0:%d' % __num_of_unknowns)
     __K_h = sp.Matrix(utils.get_toeplitz(np.array(sp.Array(__unknowns)), __fine_scale, zero_padding=True))
 
-    __P = sp.Matrix(get_prolongation(__method, __coarse_scale, __fine_scale, __zero_padding=False, __kernel_size=len(__kernel)))
-    __R = sp.Matrix(get_restriction(__method, __fine_scale, __coarse_scale, __zero_padding=False, __kernel_size=len(__kernel)))
     __K_H = sp.Matrix(np.transpose(utils.get_toeplitz(__kernel, __coarse_scale, zero_padding=__zero_padding)))
 
     __B = __R * __K_h * __P

@@ -1,13 +1,12 @@
-import multiscale
+# import multiscale
 import utils
 import keras
 from keras import models
 from keras import layers
 import numpy as np
-import math
-import to_fully_conv
-from keras.layers import Lambda
-from keras import backend as K
+# import to_fully_conv
+# from keras.layers import Lambda
+# from keras import backend as K
 
 
 def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=False):
@@ -364,39 +363,6 @@ def linear(old_kernels):
                         j += 2
 
                     new_kernel[-1] = - 0.5 * old_kernel[-2]
-
-                # if (old_kernel_size) / 2 % 2 == 0:
-                #
-                #     new_kernel_size = (old_kernel_size - 2) // 2
-                #
-                #     new_kernel = np.ndarray(shape=(new_kernel_size))
-                #
-                #     new_kernel[0] = -0.5 * old_kernel[-1]
-                #     new_kernel[1] = 1.5 * old_kernel[-1] - 0.5 * old_kernel[-3]
-                #
-                #     j = 2
-                #     for i in range(2, new_kernel_size - 2):
-                #         new_kernel[i] = old_kernel[-j] + 1.5 * old_kernel[-j - 1] - 0.5 * old_kernel[-j - 3]
-                #         j += 2
-                #
-                #     new_kernel[-1] = old_kernel[1] + 1.5 * old_kernel[2]
-                #
-                # elif (old_kernel_size) / 2 % 2 == 1:
-                #
-                #     new_kernel_size = (old_kernel_size) // 2
-                #
-                #     new_kernel = np.ndarray(shape=(new_kernel_size))
-                #
-                #     new_kernel[0] = - 0.5 * old_kernel[-2]
-                #
-                #     j = 1
-                #     for i in range(1, new_kernel_size - 2):
-                #         new_kernel[i] = old_kernel[-j] + 1.5 * old_kernel[-j - 1] - 0.5 * old_kernel[-j - 3]
-                #         j += 2
-                #
-                #     new_kernel[-2] = 0.5 * old_kernel[1] + old_kernel[2]
-                #     new_kernel[-1] = old_kernel[0]
-
 
             current_node_new_kernels.append(new_kernel)
 
