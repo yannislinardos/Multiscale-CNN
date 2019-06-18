@@ -73,6 +73,23 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
 
                 new_model.add(new_layer)
 
+
+            elif method == 'dilate':
+
+                new_kernels = dilate_kernels(old_kernels)
+                new_weights = [utils.get_weights(new_kernels), biases]
+
+                if first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              input_shape=(4*24000, 1), padding='same', weights=new_weights)
+                    first_layer = False
+
+                elif not first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              padding='same', weights=new_weights)
+
+                new_model.add(new_layer)
+
         elif type(layer) is keras.layers.pooling.MaxPooling1D:
 
             pool_size = layer.pool_size[0]
@@ -119,6 +136,15 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
             elif method == 'distance_weighting':
 
                 new_kernels = distance_weighting(old_kernels)
+                new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
+                new_conv_weights = utils.get_weights(new_kernels)
+                new_dense_weights = [new_conv_weights.reshape((original_shape[0]*2,output_dim)), biases]
+
+                new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
+            elif method == 'dilate':
+
+                new_kernels = dilate_kernels(old_kernels)
                 new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
                 new_conv_weights = utils.get_weights(new_kernels)
                 new_dense_weights = [new_conv_weights.reshape((original_shape[0]*2,output_dim)), biases]
@@ -807,6 +833,34 @@ def distance_weighting(old_kernels):
     return np.array(all_new_kernels)
 
 
+def dilate_kernels(old_kernels, rate=2):
+
+    all_new_kernels = []
+
+    old_kernel_size = old_kernels.shape[2]
+
+    for current_node in range(old_kernels.shape[0]):
+
+        current_node_new_kernels = []
+
+        for prev_node in range(old_kernels.shape[1]):
+
+            old_kernel = old_kernels[current_node][prev_node]
+
+            new_kernel_size = old_kernel_size * 2 - 1
+
+            new_kernel = np.zeros(shape=(new_kernel_size))
+
+            new_kernel.put([i for i in range(0,new_kernel_size,rate)], old_kernel)
+
+            current_node_new_kernels.append(new_kernel)
+
+        all_new_kernels.append(current_node_new_kernels)
+
+    return np.array(all_new_kernels)
+
+
+
 def pad_zeros(new_kernels, old_kernel_size):
 
         new_kernel_size = new_kernels.shape[-1]
@@ -834,4 +888,4 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    upscale('distance_weighting', 'Model_12KHz_98%_meanPooling', 'test')
+    upscale('dilate', 'Model_12KHz_98%_meanPooling', 'test')
