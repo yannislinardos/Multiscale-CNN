@@ -6,15 +6,14 @@ import numpy as np
 import sympy as sp
 from scipy.sparse.linalg import lsqr
 from scipy import sparse
+import scipy
 
 
-def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool=False):
+def upscale(method: str, old_model_name: str, new_model_name: str):
 
     old_model = utils.load_model('Models/{}.yaml'.format(old_model_name), 'Models/{}.h5'.format(old_model_name))
 
     new_model = models.Sequential()
-
-    # model_all_conv = to_fully_conv.to_fully_conv(old_model)
 
     first_layer = True
     for layer in old_model.layers:
@@ -32,13 +31,12 @@ def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fals
 
                 if first_layer:
                     new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
-                                          input_shape=(96000, 1), padding='same', weights=new_weights)
+                                          input_shape=(4*24000, 1), padding='same', weights=new_weights)
                     first_layer = False
 
                 elif not first_layer:
                     new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
                                           padding='same', weights=new_weights)
-
 
                 new_model.add(new_layer)
 
@@ -50,7 +48,7 @@ def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fals
 
                 if first_layer:
                     new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
-                                              input_shape=(24000, 1), padding='same', weights=new_weights)
+                                              input_shape=(4*24000, 1), padding='same', weights=new_weights)
                     first_layer = False
 
                 elif not first_layer:
@@ -66,7 +64,7 @@ def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fals
 
                 if first_layer:
                     new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
-                                              input_shape=(24000, 1), padding='same', weights=new_weights)
+                                              input_shape=(4*24000, 1), padding='same', weights=new_weights)
                     first_layer = False
 
                 elif not first_layer:
@@ -78,48 +76,12 @@ def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fals
         elif type(layer) is keras.layers.pooling.MaxPooling1D:
 
             pool_size = layer.pool_size[0]
-
             new_model.add(layers.MaxPooling1D(pool_size=pool_size))
 
         elif type(layer) is keras.layers.pooling.AveragePooling1D:
 
-            nodes = layer.get_output_at(0).shape[-1].value
             pool_size = layer.pool_size[0]
-
-            if method == 'nearest_neighbor':
-
-                new_model.add(layers.AveragePooling1D(pool_size=pool_size))
-
-            elif method == 'linear':
-
-                if avg_pool is True:
-                    new_model.add(layers.AveragePooling1D(pool_size=pool_size))
-
-                else:
-                    new_kernels = down_scale_avg_pooling(nodes, [3/2,-1/4,-1/4])
-                    dummy_bias = np.zeros(nodes)
-                    new_weights = [utils.get_weights(new_kernels), dummy_bias]
-
-                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[-1], activation='linear'
-                                              , padding='same', strides=2, weights=new_weights)
-
-                    new_model.add(new_layer)
-
-            elif method == 'distance_weighting':
-
-                if avg_pool is True:
-                    new_model.add(layers.AveragePooling1D(pool_size=pool_size))
-
-                else:
-                    new_kernels = down_scale_avg_pooling(nodes, [-1/4,1/2,3/4])
-                    dummy_bias = np.zeros(nodes)
-                    new_weights = [utils.get_weights(new_kernels), dummy_bias]
-
-                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[-1], activation='linear',
-                                              padding='same', strides=2, weights=new_weights)
-                    new_model.add(new_layer)
-
-    # new_model.add(Lambda(lambda x: K.batch_flatten(x)))
+            new_model.add(layers.AveragePooling1D(pool_size=pool_size))
 
         elif type(layer) is keras.layers.Flatten:
 
@@ -142,23 +104,16 @@ def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fals
                 new_kernels = nearest_neighbor(old_kernels)
                 new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
                 new_conv_weights = utils.get_weights(new_kernels)
-                print('new kernels ', new_kernels.shape)
-                print('old kernels ', old_kernels.shape)
-                print('new_conv_weights ', new_conv_weights.shape)
                 new_dense_weights = [new_conv_weights.reshape((original_shape[0]*2,output_dim)), biases]
 
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
             elif method == 'linear':
-                print('old ', old_kernels.shape)
                 new_kernels = linear(old_kernels)
                 new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
-                print('new ', new_kernels.shape)
-                print(new_kernels)
                 new_conv_weights = utils.get_weights(new_kernels)
-                new_dense_weights = [new_conv_weights.reshape(original_shape[0]//2,output_dim), biases]
-                print(new_dense_weights)
-                print('new dense ', new_dense_weights[0].shape)
+                new_dense_weights = [new_conv_weights.reshape(original_shape[0]*2,output_dim), biases]
+
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
             elif method == 'distance_weighting':
@@ -166,20 +121,17 @@ def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fals
                 new_kernels = distance_weighting(old_kernels)
                 new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
                 new_conv_weights = utils.get_weights(new_kernels)
-                new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
+                new_dense_weights = [new_conv_weights.reshape((original_shape[0]*2,output_dim)), biases]
 
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
     X, Y = utils.load_data('Dataframes/Testing24.pickle')
     score = utils.test_model(new_model, X, Y)
-    print(method)
-    print("%s: %.2f%%" % (new_model.metrics_names[1], score))
-    # model_yaml = new_model.to_yaml()
-    # with open("Models/Multiscaled/{}.yaml".format(new_model_name), "w") as yaml_file:
-    #     yaml_file.write(model_yaml)
-    #
-    # # serialize weights to HDF5
-    # new_model.save_weights("Models/Multiscaled/{}.h5".format(new_model_name))
+
+    # SAVE MODEL
+    # utils.save_model(new_model, 'Multiscaled/{}'.format(new_model_name))
+
+    return new_model
 
 
 def nearest_neighbor(old_kernels):
@@ -223,7 +175,6 @@ def nearest_neighbor(old_kernels):
                         equations.append(equation)
 
                         coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
-                        print('Coefficient Matrix Extracted')
                         del equations
 
                     new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
@@ -252,7 +203,6 @@ def nearest_neighbor(old_kernels):
                         equations.append(equation)
 
                         coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
-                        print('Coefficient Matrix Extracted')
                         del equations
 
                     new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
@@ -261,78 +211,11 @@ def nearest_neighbor(old_kernels):
 
             elif old_kernel_size % 2 == 0:
 
-                if ((old_kernel_size) / 2) % 2 == 0:
+                if (old_kernel_size / 2) % 2 == 0:
 
-                    # if len(coefficient_matrix) == 0:
-                    if True:
+                    if type(coefficient_matrix) is not scipy.sparse.coo.coo_matrix:
 
-                        new_kernel_size = 2 * old_kernel_size - 3
-
-                        # row indices
-                        row_ind = []
-                        # column indices
-                        col_ind = []
-                        # data to be stored in COO sparse matrix
-                        data = []
-
-                        # coefficient_matrix[0][0] = 0.5
-                        row_ind.append(0)
-                        col_ind.append(0)
-                        data.append(0.5)
-
-                        j = 0
-                        for i in range(1, old_kernel_size - 1):
-                            # coefficient_matrix[i][j] = 0.5
-                            row_ind.append(i)
-                            col_ind.append(j)
-                            data.append(0.5)
-
-                            # coefficient_matrix[i][j + 1] = 1
-                            row_ind.append(i)
-                            col_ind.append(j+1)
-                            data.append(1)
-
-                            # coefficient_matrix[i][j + 2] = 0.5
-                            row_ind.append(i)
-                            col_ind.append(j + 2)
-                            data.append(0.5)
-
-                            j += 2
-
-                        # coefficient_matrix[-1][-1] = 0.5
-                        row_ind.append(old_kernel_size - 1)
-                        col_ind.append(new_kernel_size - 1)
-                        data.append(0.5)
-
-
-                        data = np.array(data, dtype='float')
-                        row_ind = np.array(row_ind)
-                        col_ind = np.array(col_ind)
-
-                        coefficient_matrix = sparse.coo_matrix((data, (row_ind, col_ind)))
-
-                        # coefficient_matrix = np.zeros(shape=(old_kernel_size, new_kernel_size), dtype=np.float16)
-                        #
-                        # coefficient_matrix[0][0] = 0.5
-                        #
-                        # j = 0
-                        # for i in range(1, old_kernel_size - 1):
-                        #     coefficient_matrix[i][j] = 0.5
-                        #     coefficient_matrix[i][j + 1] = 1
-                        #     coefficient_matrix[i][j + 2] = 0.5
-                        #     j += 2
-                        #
-                        # coefficient_matrix[-1][-1] = 0.5
-
-                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
-
-                    current_node_new_kernels.append(new_kernel)
-
-                elif ((old_kernel_size) / 2) % 2 == 1:
-
-                    if len(coefficient_matrix) == 0:
-                        
-                        new_kernel_size = 2 * old_kernel_size -3
+                        new_kernel_size = 2 * old_kernel_size - 1
 
                         # row indices
                         row_ind = []
@@ -351,6 +234,59 @@ def nearest_neighbor(old_kernels):
                         col_ind.append(1)
                         data.append(0.5)
 
+                        j = 1
+                        for i in range(1, old_kernel_size - 1):
+                            # coefficient_matrix[i][j] = 0.5
+                            row_ind.append(i)
+                            col_ind.append(j)
+                            data.append(0.5)
+
+                            # coefficient_matrix[i][j + 1] = 1
+                            row_ind.append(i)
+                            col_ind.append(j+1)
+                            data.append(1)
+
+                            # coefficient_matrix[i][j + 2] = 0.5
+                            row_ind.append(i)
+                            col_ind.append(j + 2)
+                            data.append(0.5)
+
+                            j += 2
+
+                        # coefficient_matrix[-1][-1] = 0.5
+                        row_ind.append(old_kernel_size - 1)
+                        col_ind.append(new_kernel_size - 1)
+                        data.append(0.5)
+
+                        data = np.array(data, dtype='float')
+                        row_ind = np.array(row_ind)
+                        col_ind = np.array(col_ind)
+
+                        coefficient_matrix = sparse.coo_matrix((data, (row_ind, col_ind)))
+
+
+                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+
+                    current_node_new_kernels.append(new_kernel)
+
+                elif (old_kernel_size / 2) % 2 == 1:
+
+                    if type(coefficient_matrix) is not scipy.sparse.coo.coo_matrix:
+                        
+                        new_kernel_size = 2 * old_kernel_size -1
+
+                        # row indices
+                        row_ind = []
+                        # column indices
+                        col_ind = []
+                        # data to be stored in COO sparse matrix
+                        data = []
+
+                        # coefficient_matrix[0][0] = 0.5
+                        row_ind.append(0)
+                        col_ind.append(0)
+                        data.append(0.5)
+
                         j = 0
                         for i in range(1, old_kernel_size - 1):
                             # coefficient_matrix[i][j] = 0.5
@@ -370,12 +306,12 @@ def nearest_neighbor(old_kernels):
 
                             j += 2
 
-                        # # coefficient_matrix[-1][-1] = 1
+                        # coefficient_matrix[-1][-1] = 1
                         row_ind.append(old_kernel_size - 1)
                         col_ind.append(new_kernel_size - 1)
                         data.append(1)
 
-                        # coefficient_matrix[-1][-2] = 0.5
+                        # coefficient_matrix[-1][-2] = 1
                         row_ind.append(old_kernel_size - 1)
                         col_ind.append(new_kernel_size - 2)
                         data.append(0.5)
@@ -385,21 +321,6 @@ def nearest_neighbor(old_kernels):
                         col_ind = np.array(col_ind)
 
                         coefficient_matrix = sparse.coo_matrix((data, (row_ind, col_ind)))
-
-                        # coefficient_matrix = np.zeros(shape=(old_kernel_size, new_kernel_size), dtype=np.float16)
-                        #
-                        # coefficient_matrix[0][0] = 1
-                        # coefficient_matrix[0][1] = 0.5
-                        #
-                        # j = 0
-                        # for i in range(1, old_kernel_size-1):
-                        #     coefficient_matrix[i][j] = 0.5
-                        #     coefficient_matrix[i][j+1] = 1
-                        #     coefficient_matrix[i][j+2] = 0.5
-                        #     j += 2
-                        #
-                        # coefficient_matrix[-1][-1] = 1
-                        # coefficient_matrix[-1][-2] = 0.5
 
                     new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
                     current_node_new_kernels.append(new_kernel)
@@ -432,7 +353,7 @@ def linear(old_kernels):
 
                         equations = []
 
-                        new_kernel_size = old_kernel_size*2 -3
+                        new_kernel_size = old_kernel_size*2 - 3
 
                         new_kernel = sp.symbols('x0:%d' % new_kernel_size)
 
@@ -445,16 +366,17 @@ def linear(old_kernels):
                             equations.append(equation)
                             j += 2
 
-                        equation = sp.Eq(old_kernel[-2], 1.5 * new_kernel[-1] - 0.5 * new_kernel[-3])
+                        equation = sp.Eq(old_kernel[-2], 1.5*new_kernel[-1] - 0.5 * new_kernel[-3])
                         equations.append(equation)
+
                         equation = sp.Eq(old_kernel[-1], -0.5 * new_kernel[-1])
                         equations.append(equation)
 
                         coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
                         del equations
-                        print('Coefficient Matrix Extracted')
 
                     new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+                    current_node_new_kernels.append(new_kernel)
 
                 elif (old_kernel_size + 1) / 2 % 2 == 1:
 
@@ -462,70 +384,7 @@ def linear(old_kernels):
 
                         equations = []
 
-                        new_kernel_size = old_kernel_size*2-3
-
-                        new_kernel = sp.symbols('x0:%d' % new_kernel_size)
-
-                        equation = sp.Eq(old_kernel[0], new_kernel[0])
-                        equations.append(equation)
-                        equation = sp.Eq(old_kernel[1], 0.5 * new_kernel[1] + new_kernel[2])
-                        equations.append(equation)
-
-                        j = 1
-                        for i in range(2, old_kernel_size - 2):
-                            equation = sp.Eq(old_kernel[i], new_kernel[j+3] + 1.5*new_kernel[j+2] - 0.5 * new_kernel[j])
-                            equations.append(equation)
-                            j += 2
-
-                        equation = sp.Eq(old_kernel[-1], - 0.5 * new_kernel[-2])
-                        equations.append(equation)
-
-                        coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
-                        del equations
-                        print('Coefficient Matrix Extracted')
-
-                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
-
-            elif old_kernel_size % 2 == 0:
-
-                # new_kernel = multiscale.downscale_kernel('linear', old_kernel, old_kernel_size, old_kernel_size //2 )
-
-                if (old_kernel_size) / 2 % 2 == 0:
-
-                    if len(coefficient_matrix) == 0:
-
-                        equations = []
-
-                        new_kernel_size = old_kernel_size*2 - 3
-                        new_kernel = sp.symbols('x0:%d' % new_kernel_size)
-
-                        equation = sp.Eq(old_kernel[0], new_kernel[1] + 1.5 * new_kernel[0])
-                        equations.append(equation)
-
-                        j = 0
-                        for i in range(1, old_kernel_size - 2):
-                            equation = sp.Eq(old_kernel[i], new_kernel[j+3] + 1.5*new_kernel[j+2] - 0.5 * new_kernel[j])
-                            equations.append(equation)
-                            j += 2
-
-                        equation = sp.Eq(old_kernel[-2], 1.5 * new_kernel[-1] - 0.5 * new_kernel[-3])
-                        equations.append(equation)
-                        equation = sp.Eq(old_kernel[-1], -0.5 * new_kernel[-1])
-                        equations.append(equation)
-
-                        coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
-                        del equations
-                        print('Coefficient Matrix Extracted')
-
-                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
-
-                elif (old_kernel_size) / 2 % 2 == 1:
-
-                    if len(coefficient_matrix) == 0:
-
-                        equations = []
-
-                        new_kernel_size = old_kernel_size* 2 - 3
+                        new_kernel_size = old_kernel_size*2-2
 
                         new_kernel = sp.symbols('x0:%d' % new_kernel_size)
 
@@ -545,11 +404,139 @@ def linear(old_kernels):
 
                         coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
                         del equations
-                        print('Coefficient Matrix Extracted')
+
+                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+                    current_node_new_kernels.append(new_kernel)
+
+            elif old_kernel_size % 2 == 0:
+
+                if (old_kernel_size / 2) % 2 == 0:
+
+                    if type(coefficient_matrix) is not scipy.sparse.coo.coo_matrix:
+
+                        new_kernel_size = 2 * old_kernel_size - 2
+
+                        # row indices
+                        row_ind = []
+                        # column indices
+                        col_ind = []
+                        # data to be stored in COO sparse matrix
+                        data = []
+
+                        # coefficient_matrix[0][0] = 1
+                        row_ind.append(0)
+                        col_ind.append(0)
+                        data.append(1)
+
+                        # coefficient_matrix[1][1] = 1.5
+                        row_ind.append(1)
+                        col_ind.append(1)
+                        data.append(1.5)
+
+                        # coefficient_matrix[1][2] = 1
+                        row_ind.append(1)
+                        col_ind.append(2)
+                        data.append(1)
+
+                        j = 1
+                        for i in range(2, old_kernel_size - 2):
+                            # coefficient_matrix[i][j] = -0.5
+                            row_ind.append(i)
+                            col_ind.append(j)
+                            data.append(-0.5)
+
+                            # coefficient_matrix[i][j + 2] = 1.5
+                            row_ind.append(i)
+                            col_ind.append(j + 2)
+                            data.append(1.5)
+
+                            # coefficient_matrix[i][j + 3] = 1
+                            row_ind.append(i)
+                            col_ind.append(j + 3)
+                            data.append(1)
+
+                            j += 2
+
+                        # coefficient_matrix[-1][-1] = -0.5
+                        row_ind.append(old_kernel_size - 1)
+                        col_ind.append(new_kernel_size - 1)
+                        data.append(-0.5)
+
+                        # coefficient_matrix[-2][-3] = 1.5
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 1)
+                        data.append(1.5)
+
+                        # coefficient_matrix[-2][-1] = -0.5
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 3)
+                        data.append(-0.5)
+
+                        data = np.array(data, dtype='float')
+                        row_ind = np.array(row_ind)
+                        col_ind = np.array(col_ind)
+
+                        coefficient_matrix = sparse.coo_matrix((data, (row_ind, col_ind)))
 
                     new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
 
-            current_node_new_kernels.append(new_kernel)
+                    current_node_new_kernels.append(new_kernel)
+
+                elif (old_kernel_size / 2) % 2 == 1:
+
+                    if type(coefficient_matrix) is not scipy.sparse.coo.coo_matrix:
+
+                        new_kernel_size = 2 * old_kernel_size - 1
+
+                        # row indices
+                        row_ind = []
+                        # column indices
+                        col_ind = []
+                        # data to be stored in COO sparse matrix
+                        data = []
+
+                        # coefficient_matrix[0][0] = 1.5
+                        row_ind.append(0)
+                        col_ind.append(0)
+                        data.append(1.5)
+
+                        # coefficient_matrix[0][1] = 1
+                        row_ind.append(0)
+                        col_ind.append(0)
+                        data.append(1)
+
+                        j = 0
+                        for i in range(1, old_kernel_size - 1):
+                            # coefficient_matrix[i][j] = -0.5
+                            row_ind.append(i)
+                            col_ind.append(j)
+                            data.append(-0.5)
+
+                            # coefficient_matrix[i][j + 2] = 1.5
+                            row_ind.append(i)
+                            col_ind.append(j + 2)
+                            data.append(1.5)
+
+                            # coefficient_matrix[i][j + 3] = 1
+                            row_ind.append(i)
+                            col_ind.append(j + 3)
+                            data.append(1)
+
+                            j += 2
+
+                        # coefficient_matrix[-1][-2] = -0.5
+                        row_ind.append(old_kernel_size - 1)
+                        col_ind.append(new_kernel_size - 2)
+                        data.append(-0.5)
+
+                        data = np.array(data, dtype='float')
+                        row_ind = np.array(row_ind)
+                        col_ind = np.array(col_ind)
+
+                        coefficient_matrix = sparse.coo_matrix((data, (row_ind, col_ind)))
+
+                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+                    current_node_new_kernels.append(new_kernel)
 
         all_new_kernels.append(current_node_new_kernels)
 
@@ -678,4 +665,4 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    a = upscale('nearest_neighbor', 'Model_12KHz_98%_meanPooling', 'test', True)
+    upscale('linear', 'Model_12KHz_98%_meanPooling', 'test')

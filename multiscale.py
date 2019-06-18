@@ -403,12 +403,12 @@ if __name__ == '__main__':
 
 
 ###################### Get formulae #########################
-    method = 'distance_weighting'
+    method = 'nearest_neighbor'
     coarse_scale = 16
     fine_scale = 32
 
-    high_kernel = symbols('x1:%d' % 10)
-    low_kernel = symbols('y1:%d' % 10)
+    high_kernel = symbols('x1:%d' % 13)
+    low_kernel = symbols('y1:%d' % 13)
     K_h = sp.Matrix(utils.get_toeplitz(high_kernel, fine_scale, zero_padding=True))
 
     P = sp.Matrix(get_prolongation(method, coarse_scale, fine_scale, __zero_padding=False))
