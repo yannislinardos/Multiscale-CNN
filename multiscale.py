@@ -467,65 +467,65 @@ if __name__ == '__main__':
 
 
 ####################### Upscaling avg pooling####################################3
-# kernel_original = np.array([0.5,0.5], dtype=np.float32)
-# print('kernel original: ', kernel_original)
-#
-# kernel_down = downscale_kernel(method, kernel_original, fine_scale, coarse_scale, __zero_padding=False)
-# print('kernel downscale: ', kernel_down)
-# kernel_up = upscale_kernel(method, kernel_down, coarse_scale, fine_scale, __zero_padding=False)
-# print('kernel upscale: ', kernel_up)
-
-
-# kernel = symbols('x1:%d' % 4)
-# # avg_pool = symbols('y1:%d' % 4)
-#
-# # K_P = sp.Matrix(get_avg_pooling(coarse_scale))
-# # K_P = sp.Matrix(utils.strided_toeplitz(avg_pool, coarse_scale))
-#
-# P = sp.Matrix(get_prolongation(method, coarse_scale, fine_scale, __zero_padding=False))
-# R = sp.Matrix(get_restriction(method, fine_scale // 2, coarse_scale // 2, __zero_padding=False))
-#
-# # K_p, unknowns = utils.get_symbol_matrix(fine_scale//2, fine_scale)
-#
-# K_p = sp.Matrix(utils.strided_toeplitz(kernel, fine_scale))
-#
-# B = R * K_p * P
-#
-# K_P.col_del(-1)
-# B.col_del(0)
-#
-# M = K_P - B
-#
-# eq = sp.Eq(K_P, B)
-#
-# solutions = sp.solve(eq, kernel)
-#
-# equations = []
-#
-# for r in range(M.shape[0]-2):
-#     for c in range(M.shape[1]):
-#         equation = sp.Eq(M[r, c])
-#
-#         if equation not in equations and type(equation) == sp.Eq:
-#             equations.append(equation)
-#
-#
-
-
-# M.col_del(0)
-# K_P.col_del(0)
-
-# eq = sp.Eq(K_P, B)
-#
-
-# equations = []
-#
-# for r in range(M.shape[0]):
-#     for c in range(M.shape[1]):
-#         equation = sp.Eq(M[r, c])
-#
-#         if equation not in equations and type(equation) == sp.Eq:
-#             equations.append(equation)
-#
-#
-# solutions = sp.solve(eq, kernel)
+    # kernel_original = np.array([0.5,0.5], dtype=np.float32)
+    # print('kernel original: ', kernel_original)
+    #
+    # kernel_down = downscale_kernel(method, kernel_original, fine_scale, coarse_scale, __zero_padding=False)
+    # print('kernel downscale: ', kernel_down)
+    # kernel_up = upscale_kernel(method, kernel_down, coarse_scale, fine_scale, __zero_padding=False)
+    # print('kernel upscale: ', kernel_up)
+    #
+    #
+    # kernel = symbols('x1:%d' % 4)
+    # # avg_pool = symbols('y1:%d' % 4)
+    #
+    # # K_P = sp.Matrix(get_avg_pooling(coarse_scale))
+    # # K_P = sp.Matrix(utils.strided_toeplitz(avg_pool, coarse_scale))
+    #
+    # P = sp.Matrix(get_prolongation(method, coarse_scale, fine_scale, __zero_padding=False))
+    # R = sp.Matrix(get_restriction(method, fine_scale // 2, coarse_scale // 2, __zero_padding=False))
+    #
+    # # K_p, unknowns = utils.get_symbol_matrix(fine_scale//2, fine_scale)
+    #
+    # K_p = sp.Matrix(utils.strided_toeplitz(kernel, fine_scale))
+    #
+    # B = R * K_p * P
+    #
+    # K_P.col_del(-1)
+    # B.col_del(0)
+    #
+    # M = K_P - B
+    #
+    # eq = sp.Eq(K_P, B)
+    #
+    # solutions = sp.solve(eq, kernel)
+    #
+    # equations = []
+    #
+    # for r in range(M.shape[0]-2):
+    #     for c in range(M.shape[1]):
+    #         equation = sp.Eq(M[r, c])
+    #
+    #         if equation not in equations and type(equation) == sp.Eq:
+    #             equations.append(equation)
+    #
+    #
+    #
+    #
+    # M.col_del(0)
+    # K_P.col_del(0)
+    #
+    # eq = sp.Eq(K_P, B)
+    #
+    #
+    # equations = []
+    #
+    # for r in range(M.shape[0]):
+    #     for c in range(M.shape[1]):
+    #         equation = sp.Eq(M[r, c])
+    #
+    #         if equation not in equations and type(equation) == sp.Eq:
+    #             equations.append(equation)
+    #
+    #
+    # solutions = sp.solve(eq, kernel)

@@ -888,4 +888,4 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    upscale('dilate', 'Model_12KHz_98%_meanPooling', 'test')
+    upscale('distance_weighting', 'Model_12KHz_98%_meanPooling', 'test')
