@@ -549,6 +549,8 @@ def distance_weighting(old_kernels):
 
     old_kernel_size = old_kernels.shape[2]
 
+    coefficient_matrix = []
+
     for current_node in range(old_kernels.shape[0]):
 
         current_node_new_kernels = []
@@ -560,78 +562,245 @@ def distance_weighting(old_kernels):
 
                 if (old_kernel_size + 1) / 2 % 2 == 0:
 
-                    new_kernel_size = (old_kernel_size + 5) // 2
+                    if len(coefficient_matrix) == 0:
 
-                    new_kernel = np.ndarray(shape=(new_kernel_size))
+                        equations = []
 
-                    new_kernel[0] = -1/8*old_kernel[0]
-                    new_kernel[1] = -1/8* old_kernel[2] + 3/4 * old_kernel[0]
+                        new_kernel_size = old_kernel_size*2 - 5
 
-                    j = 0
-                    for i in range(2, new_kernel_size - 2):
-                        new_kernel[i] = -1/8*old_kernel[j+4] + 3/4 * old_kernel[j+2] + old_kernel[j -+1] + 3/8 * old_kernel[j]
-                        j += 2
+                        new_kernel = sp.symbols('x0:%d' % new_kernel_size)
 
-                    new_kernel[-2] = 3/4 * old_kernel[-1] + old_kernel[-2] + 3/8 * old_kernel[-3]
-                    new_kernel[-1] = 3/8 * old_kernel[-1]
+                        equation = sp.Eq(old_kernel[0], -1/8 * new_kernel[0])
+                        equations.append(equation)
+
+                        equation = sp.Eq(old_kernel[1], -1 / 8 * new_kernel[3] + 3/4 * new_kernel[1])
+                        equations.append(equation)
+
+                        j = 0
+                        for i in range(2, old_kernel_size - 2):
+                            equation = sp.Eq(old_kernel[i], -1 / 8 * new_kernel[j+4] + 3/4 * new_kernel[j+2] + new_kernel[j+1] + 3/8 * new_kernel[j])
+                            equations.append(equation)
+                            j += 2
+
+                        equation = sp.Eq(old_kernel[-2], 3/4 * new_kernel[-1] + new_kernel[-2] + 3/8 * new_kernel[-3])
+                        equations.append(equation)
+
+                        equation = sp.Eq(old_kernel[-1], 3/8 * new_kernel[-1])
+                        equations.append(equation)
+
+                        coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
+                        del equations
+
+                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+                    current_node_new_kernels.append(new_kernel)
 
                 elif (old_kernel_size + 1) / 2 % 2 == 1:
 
-                    new_kernel_size = (old_kernel_size +3) // 2
+                    if len(coefficient_matrix) == 0:
 
-                    new_kernel = np.ndarray(shape=(new_kernel_size))
+                        equations = []
 
-                    new_kernel[0] = -1/8*old_kernel[1]
-                    new_kernel[1] = - 1/8 * old_kernel[3] + 3/4 * old_kernel[1] + old_kernel[0]
+                        new_kernel_size = old_kernel_size*2 - 3
 
-                    j = 1
-                    for i in range(2, new_kernel_size - 2):
-                        new_kernel[i] = -1/8*old_kernel[j+4] + 3/4 * old_kernel[j+2] + old_kernel[j+1] + 3/8 * old_kernel[j]
-                        j += 2
+                        new_kernel = sp.symbols('x0:%d' % new_kernel_size)
 
-                    new_kernel[-2] = 3/4 * old_kernel[-2] + old_kernel[-3] + 3/8 * old_kernel[-4]
-                    new_kernel[-1] = old_kernel[-1] + 3/8 * old_kernel[-2]
+                        equation = sp.Eq(old_kernel[0], -1/8 * new_kernel[1])
+                        equations.append(equation)
+                        equation = sp.Eq(old_kernel[1], new_kernel[0] + 3/4 * new_kernel[1] - 1/8 * new_kernel[3])
+                        equations.append(equation)
+
+                        j = 1
+                        for i in range(2, old_kernel_size - 2):
+                            equation = sp.Eq(old_kernel[i], - 1/8 * new_kernel[j+4] + 3/4 * new_kernel[j+2] + new_kernel[j+1] + 3/8 * new_kernel[j])
+                            equations.append(equation)
+                            j += 2
+
+                        equation = sp.Eq(old_kernel[-2], 3/4 * new_kernel[-2] + new_kernel[-3] + 3/8 * new_kernel[-4])
+                        equations.append(equation)
+
+                        equation = sp.Eq(old_kernel[-1], new_kernel[-1] + 3/8 * new_kernel[-2])
+                        equations.append(equation)
+
+                        coefficient_matrix = np.array(sp.linear_eq_to_matrix(equations, new_kernel)[0], dtype='float')
+                        del equations
+
+                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+                    current_node_new_kernels.append(new_kernel)
 
             elif old_kernel_size % 2 == 0:
 
-                if (old_kernel_size) / 2 % 2 == 0:
+                if (old_kernel_size / 2) % 2 == 0:
 
-                    new_kernel_size = (old_kernel_size + 5) // 2
+                    if type(coefficient_matrix) is not scipy.sparse.coo.coo_matrix:
 
-                    new_kernel = np.ndarray(shape=(new_kernel_size))
+                        new_kernel_size = 2 * old_kernel_size - 2
 
-                    new_kernel[0] = -1 / 8 * old_kernel[0]
-                    new_kernel[1] = -1 / 8 * old_kernel[2] + 3 / 4 * old_kernel[0]
+                        # row indices
+                        row_ind = []
+                        # column indices
+                        col_ind = []
+                        # data to be stored in COO sparse matrix
+                        data = []
 
-                    j = 0
-                    for i in range(2, new_kernel_size - 2):
-                        new_kernel[i] = -1 / 8 * old_kernel[j + 4] + 3 / 4 * old_kernel[j + 2] + old_kernel[
-                            j - +1] + 3 / 8 * old_kernel[j]
-                        j += 2
+                        # coefficient_matrix[0][1] = -1/8
+                        row_ind.append(0)
+                        col_ind.append(1)
+                        data.append(-1/8)
 
-                    new_kernel[-2] = 3 / 4 * old_kernel[-1] + old_kernel[-2] + 3 / 8 * old_kernel[-3]
-                    new_kernel[-1] = 3 / 8 * old_kernel[-1]
+                        # coefficient_matrix[1][0] = 1
+                        row_ind.append(1)
+                        col_ind.append(0)
+                        data.append(1)
 
+                        # coefficient_matrix[1][1] = 3/4
+                        row_ind.append(1)
+                        col_ind.append(1)
+                        data.append(3/4)
 
-            elif (old_kernel_size) / 2 % 2 == 1:
+                        # coefficient_matrix[1][3] = -1/8
+                        row_ind.append(1)
+                        col_ind.append(3)
+                        data.append(-1/8)
 
-                new_kernel_size = (old_kernel_size + 3) // 2
+                        j = 1
+                        for i in range(2, old_kernel_size - 2):
+                            # coefficient_matrix[i][j] = 3/8
+                            row_ind.append(i)
+                            col_ind.append(j)
+                            data.append(3/8)
 
-                new_kernel = np.ndarray(shape=(new_kernel_size))
+                            # coefficient_matrix[i][j + 1] = 1
+                            row_ind.append(i)
+                            col_ind.append(j + 1)
+                            data.append(1)
 
-                new_kernel[0] = -1 / 8 * old_kernel[1]
-                new_kernel[1] = - 1 / 8 * old_kernel[3] + 3 / 4 * old_kernel[1] + old_kernel[0]
+                            # coefficient_matrix[i][j + 2] = 3/4
+                            row_ind.append(i)
+                            col_ind.append(j + 2)
+                            data.append(3/4)
 
-                j = 1
-                for i in range(2, new_kernel_size - 2):
-                    new_kernel[i] = -1 / 8 * old_kernel[j + 4] + 3 / 4 * old_kernel[j + 2] + old_kernel[
-                        j + 1] + 3 / 8 * old_kernel[j]
-                    j += 2
+                            # coefficient_matrix[i][j + 4] = -1/8
+                            row_ind.append(i)
+                            col_ind.append(j + 4)
+                            data.append(-1/8)
 
-                new_kernel[-2] = 3 / 4 * old_kernel[-2] + old_kernel[-3] + 3 / 8 * old_kernel[-4]
-                new_kernel[-1] = old_kernel[-1] + 3 / 8 * old_kernel[-2]
+                            j += 2
 
-            current_node_new_kernels.append(new_kernel)
+                        # coefficient_matrix[-1][-1] = 3/8
+                        row_ind.append(old_kernel_size - 1)
+                        col_ind.append(new_kernel_size - 1)
+                        data.append(3/8)
+
+                        # coefficient_matrix[-2][-1] = 3/4
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 1)
+                        data.append(3/4)
+
+                        # coefficient_matrix[-2][-2] = -1
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 2)
+                        data.append(1)
+
+                        # coefficient_matrix[-2][-3] = 3/8
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 3)
+                        data.append(3/8)
+
+                        data = np.array(data, dtype='float')
+                        row_ind = np.array(row_ind)
+                        col_ind = np.array(col_ind)
+
+                        coefficient_matrix = sparse.coo_matrix((data, (row_ind, col_ind)))
+
+                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+
+                    current_node_new_kernels.append(new_kernel)
+
+                elif (old_kernel_size / 2) % 2 == 1:
+
+                    if type(coefficient_matrix) is not scipy.sparse.coo.coo_matrix:
+
+                        new_kernel_size = 2 * old_kernel_size - 2
+
+                        # row indices
+                        row_ind = []
+                        # column indices
+                        col_ind = []
+                        # data to be stored in COO sparse matrix
+                        data = []
+
+                        # coefficient_matrix[0][0] = -1/8
+                        row_ind.append(0)
+                        col_ind.append(0)
+                        data.append(-1/8)
+
+                        # coefficient_matrix[1][0] = 3/4
+                        row_ind.append(1)
+                        col_ind.append(0)
+                        data.append(3/4)
+
+                        # coefficient_matrix[1][2] = -1/8
+                        row_ind.append(1)
+                        col_ind.append(2)
+                        data.append(-1/8)
+
+                        j = 0
+                        for i in range(2, old_kernel_size - 2):
+                            # coefficient_matrix[i][j] = 3/8
+                            row_ind.append(i)
+                            col_ind.append(j)
+                            data.append(3/8)
+
+                            # coefficient_matrix[i][j + 1] = 1
+                            row_ind.append(i)
+                            col_ind.append(j + 1)
+                            data.append(1)
+
+                            # coefficient_matrix[i][j + 2] = 3/4
+                            row_ind.append(i)
+                            col_ind.append(j + 2)
+                            data.append(3 / 4)
+
+                            # coefficient_matrix[i][j + 4] = -1/8
+                            row_ind.append(i)
+                            col_ind.append(j + 4)
+                            data.append(-1 / 8)
+
+                            j += 2
+
+                        # coefficient_matrix[-1][-1] = 1
+                        row_ind.append(old_kernel_size - 1)
+                        col_ind.append(new_kernel_size - 1)
+                        data.append(1)
+
+                        # coefficient_matrix[-1][-2] = 3/8
+                        row_ind.append(old_kernel_size - 1)
+                        col_ind.append(new_kernel_size - 2)
+                        data.append(3/8)
+
+                        # coefficient_matrix[-2][-2] = 3/4
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 2)
+                        data.append(3 / 4)
+
+                        # coefficient_matrix[-2][-3] = -1
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 3)
+                        data.append(1)
+
+                        # coefficient_matrix[-2][-4] = 3/8
+                        row_ind.append(old_kernel_size - 2)
+                        col_ind.append(new_kernel_size - 4)
+                        data.append(3 / 8)
+
+                        data = np.array(data, dtype='float')
+                        row_ind = np.array(row_ind)
+                        col_ind = np.array(col_ind)
+
+                        coefficient_matrix = sparse.coo_matrix((data, (row_ind, col_ind)))
+
+                    new_kernel = lsqr(coefficient_matrix, old_kernel)[0]
+                    current_node_new_kernels.append(new_kernel)
 
         all_new_kernels.append(current_node_new_kernels)
 
@@ -665,4 +834,4 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    upscale('linear', 'Model_12KHz_98%_meanPooling', 'test')
+    upscale('distance_weighting', 'Model_12KHz_98%_meanPooling', 'test')
