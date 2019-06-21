@@ -5,7 +5,6 @@ from keras import layers
 import numpy as np
 
 
-
 def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=False):
 
     old_model = utils.load_model('Models/{}.yaml'.format(old_model_name), 'Models/{}.h5'.format(old_model_name))
@@ -34,7 +33,6 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
                 elif not first_layer:
                     new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
                                           padding='same', weights=new_weights)
-
 
                 new_model.add(new_layer)
 
@@ -67,6 +65,21 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
 
                 elif not first_layer:
                     new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              padding='same', weights=new_weights)
+
+                new_model.add(new_layer)
+
+            elif method == 'same':
+
+                new_weights = layer.get_weights()
+
+                if first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=layer.kernel.shape[0].value, activation=layer.activation,
+                                              input_shape=(48000, 1), padding='same', weights=new_weights)
+                    first_layer = False
+
+                elif not first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=layer.kernel.shape[0].value, activation=layer.activation,
                                               padding='same', weights=new_weights)
 
                 new_model.add(new_layer)
@@ -115,6 +128,10 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
                                               padding='same', strides=2, weights=new_weights)
                     new_model.add(new_layer)
 
+            elif method == 'same':
+                new_model.add(layers.AveragePooling1D(pool_size=pool_size))
+
+
         elif type(layer) is keras.layers.Flatten:
 
             new_model.add(layers.Flatten())
@@ -154,10 +171,29 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
                 new_conv_weights = utils.get_weights(new_kernels)
                 new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
 
+                print(old_kernels.shape)
+                print(new_kernels.shape)
+                print(new_dense_weights[0].shape)
+
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
+            elif method == 'same':
+
+                new_kernels = np.split(old_kernels, 2, axis=2)[0]
+                new_conv_weights = utils.get_weights(new_kernels)
+                new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
+
+                print(old_kernels.shape)
+                print(new_kernels.shape)
+                print(new_dense_weights[0].shape)
+
+                new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
 
     X, Y = utils.load_data('Dataframes/Testing12.pickle')
     score = utils.test_model(new_model, X, Y)
+
+    return new_model
 
     # SAVE MODEL
     # utils.save_model(new_model, 'Multiscaled/{}'.format(new_model_name))
@@ -469,4 +505,4 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    downscale('linear', 'Model_24KHz_97%_meanPooling', 'test', False)
+    model = downscale('same', 'Model_24KHz_97%_meanPooling', 'test', False)

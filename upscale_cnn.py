@@ -7,6 +7,8 @@ import sympy as sp
 from scipy.sparse.linalg import lsqr
 from scipy import sparse
 import scipy
+from keras import backend as K
+
 
 
 def upscale(method: str, old_model_name: str, new_model_name: str):
@@ -73,6 +75,20 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
 
                 new_model.add(new_layer)
 
+            elif method == 'same':
+
+                new_weights = layer.get_weights()
+
+                if first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=layer.kernel.shape[0].value, activation=layer.activation,
+                                              input_shape=(4 * 24000, 1), padding='same', weights=new_weights)
+                    first_layer = False
+
+                elif not first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=layer.kernel.shape[0].value, activation=layer.activation,
+                                              padding='same', weights=new_weights)
+
+                new_model.add(new_layer)
 
             elif method == 'dilate':
 
@@ -102,8 +118,10 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
 
         elif type(layer) is keras.layers.Flatten:
 
-            new_model.add(layers.Flatten())
             f_dim = layer.input_shape
+
+            if method != 'same':
+                new_model.add(layers.Flatten())
 
         elif type(layer) is keras.layers.Dense:
 
@@ -141,6 +159,25 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
                 new_dense_weights = [new_conv_weights.reshape((original_shape[0]*2,output_dim)), biases]
 
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
+
+            elif method == 'same':
+
+                input_shape = layer.input_shape
+                output_dim = layer.get_weights()[1].shape[0]
+
+                shape = (f_dim[1], f_dim[2], output_dim)
+                new_weights = weights.reshape(shape)
+                new_layer = layers.Conv1D(output_dim,
+                                          f_dim[1],
+                                          strides=1,
+                                          activation=layer.activation,
+                                          padding='valid',
+                                          weights=[new_weights, biases], name='converted_conv')
+
+                new_model.add(new_layer)
+
+                new_model.add(layers.Lambda(lambda x: K.batch_flatten(x)))
 
             elif method == 'dilate':
 
@@ -888,4 +925,4 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    upscale('distance_weighting', 'Model_12KHz_98%_meanPooling', 'test')
+    upscale('same', 'Model_12KHz_98%_meanPooling', 'test')

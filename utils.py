@@ -6,6 +6,8 @@ import pickle
 import gc
 from scipy import linalg
 import sympy as sp
+from keras.utils import plot_model
+import keras
 
 
 # loads the data from dataframe
@@ -60,6 +62,13 @@ def load_model(path_to_model, path_to_weights):
     print('Model loaded from disk')
 
     return model
+
+
+def plot_model(model_name, path_to_plot):
+
+    model = load_model('{}.yaml'.format(model_name), '{}.h5'.format(model_name))
+
+    keras.utils.plot_model(model, to_file='{}.png'.format(path_to_plot), show_shapes=True, show_layer_names=False)
 
 
 # tests a model and returns score
