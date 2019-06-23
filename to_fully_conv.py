@@ -75,7 +75,7 @@ def make_kernel_odd(weights):
 
 if __name__ == '__main__':
 
-    model = utils.load_model('Models/Model_24KHz_87%_meanpooling.yaml', 'Models/Model_24KHz_87%_meanpooling.h5')
+    model = utils.load_model('Models/Model_12KHz_98%_meanPooling.yaml', 'Models/Model_12KHz_98%_meanPooling.h5')
 
     new_model = Sequential()
 
@@ -106,7 +106,7 @@ if __name__ == '__main__':
                 new_layer = Convolution1D(output_dim,
                                           f_dim[1],
                                           strides=1,
-                                          activation='linear',               #layer.activation,
+                                          activation=layer.activation,
                                           padding='valid',
                                           weights=[new_W,b], name='converted_conv')
                 flattened_ipt = False
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     new_model.add(Lambda(lambda x: K.batch_flatten(x)))
 
 
-    #
-    # X, Y = utils.load_data('Dataframes/Testing24.pickle')
-    # score = utils.test_model(new_model, X, Y)
-    # print("%s: %.2f%%" % (new_model.metrics_names[1], score))
+
+    X, Y = utils.load_data('Dataframes/Testing24.pickle')
+    score = utils.test_model(new_model, X, Y)
+    print("%s: %.2f%%" % (new_model.metrics_names[1], score))

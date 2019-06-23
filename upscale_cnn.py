@@ -119,9 +119,10 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
         elif type(layer) is keras.layers.Flatten:
 
             f_dim = layer.input_shape
+            new_model.add(layers.Flatten())
 
-            if method != 'same':
-                new_model.add(layers.Flatten())
+            # if method != 'same':
+            #     new_model.add(layers.Flatten())
 
         elif type(layer) is keras.layers.Dense:
 
@@ -160,24 +161,31 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
 
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
-
             elif method == 'same':
 
-                input_shape = layer.input_shape
-                output_dim = layer.get_weights()[1].shape[0]
+                new_kernels = np.concatenate((old_kernels, old_kernels), axis=2)
+                new_conv_weights = utils.get_weights(new_kernels)
+                new_dense_weights = [new_conv_weights.reshape((original_shape[0]*2,output_dim)), biases]
 
-                shape = (f_dim[1], f_dim[2], output_dim)
-                new_weights = weights.reshape(shape)
-                new_layer = layers.Conv1D(output_dim,
-                                          f_dim[1],
-                                          strides=1,
-                                          activation=layer.activation,
-                                          padding='valid',
-                                          weights=[new_weights, biases], name='converted_conv')
+                new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
-                new_model.add(new_layer)
+                # output_dim = layer.get_weights()[1].shape[0]
+                #
+                # shape = (f_dim[1], f_dim[2], output_dim)
+                # new_weights = weights.reshape(shape)
+                # new_layer = layers.Conv1D(output_dim,
+                #                           f_dim[1],
+                #                           strides=1,
+                #                           activation=layer.activation,
+                #                           padding='valid',
+                #                           weights=[new_weights, biases])
+                #
+                # new_model.add(new_layer)
+                #
+                # new_model.add(layers.Lambda(lambda x: K.batch_flatten(x)))
 
-                new_model.add(layers.Lambda(lambda x: K.batch_flatten(x)))
+
+
 
             elif method == 'dilate':
 
@@ -188,13 +196,12 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
 
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
-    X, Y = utils.load_data('Dataframes/Testing24.pickle')
-    score = utils.test_model(new_model, X, Y)
+    return new_model
 
     # SAVE MODEL
     # utils.save_model(new_model, 'Multiscaled/{}'.format(new_model_name))
 
-    return new_model
+
 
 
 def nearest_neighbor(old_kernels):
@@ -925,4 +932,14 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    upscale('same', 'Model_12KHz_98%_meanPooling', 'test')
+    # cfg = K.tf.ConfigProto()
+    # cfg.gpu_options.allow_growth = True
+    # K.set_session(K.tf.Session(config=cfg))
+
+    model = upscale('same', 'Model_12KHz_98%_meanPooling', 'test')
+
+    # SAVE MODEL
+    # utils.save_model(model, 'same')
+
+    X, Y = utils.load_data('Dataframes/Testing24.pickle')
+    score = utils.test_model(model, X, Y)

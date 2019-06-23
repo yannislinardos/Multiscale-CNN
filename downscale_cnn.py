@@ -183,15 +183,7 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
                 new_conv_weights = utils.get_weights(new_kernels)
                 new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
 
-                print(old_kernels.shape)
-                print(new_kernels.shape)
-                print(new_dense_weights[0].shape)
-
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
-
-
-    X, Y = utils.load_data('Dataframes/Testing12.pickle')
-    score = utils.test_model(new_model, X, Y)
 
     return new_model
 
@@ -506,3 +498,6 @@ def pad_zeros(new_kernels, old_kernel_size):
 if __name__ == '__main__':
 
     model = downscale('same', 'Model_24KHz_97%_meanPooling', 'test', False)
+
+    X, Y = utils.load_data('Dataframes/Testing12.pickle')
+    score = utils.test_model(model, X, Y)
