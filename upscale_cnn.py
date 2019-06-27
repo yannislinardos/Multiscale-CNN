@@ -7,11 +7,12 @@ import sympy as sp
 from scipy.sparse.linalg import lsqr
 from scipy import sparse
 import scipy
+import multiscale
 from keras import backend as K
 
 
 
-def upscale(method: str, old_model_name: str, new_model_name: str):
+def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool_unaffected=True):
 
     old_model = utils.load_model('Models/{}.yaml'.format(old_model_name), 'Models/{}.h5'.format(old_model_name))
 
@@ -106,6 +107,54 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
 
                 new_model.add(new_layer)
 
+            elif method == 'nearest_directly':
+
+                new_kernels = nearest_directly(old_kernels)
+                new_weights = [utils.get_weights(new_kernels), biases]
+
+                if first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              input_shape=(4 * 24000, 1), padding='same', weights=new_weights)
+                    first_layer = False
+
+                elif not first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              padding='same', weights=new_weights)
+
+                new_model.add(new_layer)
+
+            elif method == 'linear_directly':
+
+                new_kernels = linear_directly(old_kernels)
+                new_weights = [utils.get_weights(new_kernels), biases]
+
+                if first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              input_shape=(4 * 24000, 1), padding='same', weights=new_weights)
+                    first_layer = False
+
+                elif not first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              padding='same', weights=new_weights)
+
+                new_model.add(new_layer)
+
+            elif method == 'inverse_directly':
+
+                new_kernels = inverse_directly(old_kernels)
+                new_weights = [utils.get_weights(new_kernels), biases]
+
+                if first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              input_shape=(4 * 24000, 1), padding='same', weights=new_weights)
+                    first_layer = False
+
+                elif not first_layer:
+                    new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[2], activation=layer.activation,
+                                              padding='same', weights=new_weights)
+
+                new_model.add(new_layer)
+
         elif type(layer) is keras.layers.pooling.MaxPooling1D:
 
             pool_size = layer.pool_size[0]
@@ -184,9 +233,6 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
                 #
                 # new_model.add(layers.Lambda(lambda x: K.batch_flatten(x)))
 
-
-
-
             elif method == 'dilate':
 
                 new_kernels = dilate_kernels(old_kernels)
@@ -196,11 +242,37 @@ def upscale(method: str, old_model_name: str, new_model_name: str):
 
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
+            elif method == 'nearest_directly':
+
+                new_kernels = nearest_directly(old_kernels)
+                new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
+                new_conv_weights = utils.get_weights(new_kernels)
+                new_dense_weights = [new_conv_weights.reshape((original_shape[0]*2,output_dim)), biases]
+
+                new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
+            elif method == 'linear_directly':
+
+                new_kernels = linear_directly(old_kernels)
+                new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
+                new_conv_weights = utils.get_weights(new_kernels)
+                new_dense_weights = [new_conv_weights.reshape((original_shape[0] * 2, output_dim)), biases]
+
+                new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
+            elif method == 'inverse_directly':
+
+                new_kernels = inverse_directly(old_kernels)
+                new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
+                new_conv_weights = utils.get_weights(new_kernels)
+                new_dense_weights = [new_conv_weights.reshape((original_shape[0] * 2, output_dim)), biases]
+
+                new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
+
     return new_model
 
     # SAVE MODEL
     # utils.save_model(new_model, 'Multiscaled/{}'.format(new_model_name))
-
 
 
 
@@ -904,6 +976,81 @@ def dilate_kernels(old_kernels, rate=2):
     return np.array(all_new_kernels)
 
 
+def nearest_directly(old_kernels, rate=2):
+
+    all_new_kernels = []
+
+    old_kernel_size = old_kernels.shape[2]
+
+    P = multiscale.get_prolongation('nearest_neighbor', old_kernel_size, old_kernel_size*rate, False)
+
+    for current_node in range(old_kernels.shape[0]):
+
+        current_node_new_kernels = []
+
+        for prev_node in range(old_kernels.shape[1]):
+            old_kernel = old_kernels[current_node][prev_node]
+
+            new_kernel = P @ old_kernel
+
+            current_node_new_kernels.append(new_kernel)
+
+        all_new_kernels.append(current_node_new_kernels)
+
+    return np.array(all_new_kernels)
+
+
+def linear_directly(old_kernels, rate=2):
+
+    all_new_kernels = []
+
+    old_kernel_size = old_kernels.shape[2]
+
+    P = multiscale.get_prolongation('linear', old_kernel_size, old_kernel_size*rate, False)
+
+    for current_node in range(old_kernels.shape[0]):
+
+        current_node_new_kernels = []
+
+        for prev_node in range(old_kernels.shape[1]):
+            old_kernel = old_kernels[current_node][prev_node]
+
+            new_kernel = P @ old_kernel
+
+            current_node_new_kernels.append(new_kernel)
+
+        all_new_kernels.append(current_node_new_kernels)
+
+    return np.array(all_new_kernels)
+
+
+def inverse_directly(old_kernels, rate=2):
+
+    all_new_kernels = []
+
+    old_kernel_size = old_kernels.shape[2]
+
+
+    P = multiscale.get_prolongation('distance_weighting', old_kernel_size, old_kernel_size*rate, False)
+
+    for current_node in range(old_kernels.shape[0]):
+
+        current_node_new_kernels = []
+
+        for prev_node in range(old_kernels.shape[1]):
+            old_kernel = old_kernels[current_node][prev_node]
+
+            new_kernel = P @ old_kernel
+
+            new_kernel = np.delete(new_kernel, 0)
+            new_kernel = np.delete(new_kernel, -1)
+
+            current_node_new_kernels.append(new_kernel)
+
+        all_new_kernels.append(current_node_new_kernels)
+
+    return np.array(all_new_kernels)
+
 
 def pad_zeros(new_kernels, old_kernel_size):
 
@@ -930,16 +1077,48 @@ def pad_zeros(new_kernels, old_kernel_size):
             return new_kernels
 
 
+
 if __name__ == '__main__':
 
     # cfg = K.tf.ConfigProto()
     # cfg.gpu_options.allow_growth = True
     # K.set_session(K.tf.Session(config=cfg))
 
-    model = upscale('same', 'Model_12KHz_98%_meanPooling', 'test')
+    # same
+    # nearest_neighbor
+    # linear
+    # distance_weighting
+
+    # nearest_directly
+    # linear_directly
+    # inverse_directly
+
+    model = upscale('inverse_directly', 'E12', 'test')
 
     # SAVE MODEL
     # utils.save_model(model, 'same')
 
     X, Y = utils.load_data('Dataframes/Testing24.pickle')
     score = utils.test_model(model, X, Y)
+
+    f = open("Directly.txt", "a")
+    f.write('Method: {}, Model: {}, acc: {}%\n'.format('inverse_directly', 'E12', score))
+    print('Method: {}, Model: {}, acc: {}%\n'.format('inverse_directly', 'E12', score))
+    f.close()
+
+    # 'nearest_directly', 'linear_directly', 'inverse_directly',
+
+
+    # for method in ['dilate']:
+    #     for model_name in ['A12', 'B12', 'C12', 'D12', 'E12']:
+    #
+    #         model = upscale(method, model_name, 'test')
+    #
+    #         score = utils.test_model(model, X, Y)
+    #
+    #         K.clear_session()
+    #
+    #         f = open("Directly.txt", "a")
+    #         f.write('Method: {}, Model: {}, acc: {}%\n'.format(method, model_name, score))
+    #         print('Method: {}, Model: {}, acc: {}%\n'.format(method, model_name, score))
+    #         f.close()

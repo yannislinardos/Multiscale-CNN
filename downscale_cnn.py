@@ -5,7 +5,7 @@ from keras import layers
 import numpy as np
 
 
-def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=False):
+def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool_unaffected=False):
 
     old_model = utils.load_model('Models/{}.yaml'.format(old_model_name), 'Models/{}.h5'.format(old_model_name))
 
@@ -101,7 +101,7 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
 
             elif method == 'linear':
 
-                if avg_pool is True:
+                if avg_pool_unaffected is True:
                     new_model.add(layers.AveragePooling1D(pool_size=pool_size))
 
                 else:
@@ -116,7 +116,7 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
 
             elif method == 'distance_weighting':
 
-                if avg_pool is True:
+                if avg_pool_unaffected is True:
                     new_model.add(layers.AveragePooling1D(pool_size=pool_size))
 
                 else:
@@ -170,10 +170,6 @@ def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool=Fa
                 new_kernels = pad_zeros(new_kernels, old_kernels.shape[-1])
                 new_conv_weights = utils.get_weights(new_kernels)
                 new_dense_weights = [new_conv_weights.reshape((original_shape[0]//2,output_dim)), biases]
-
-                print(old_kernels.shape)
-                print(new_kernels.shape)
-                print(new_dense_weights[0].shape)
 
                 new_model.add(layers.Dense(output_dim, activation=layer.activation, weights=new_dense_weights))
 
@@ -497,7 +493,12 @@ def pad_zeros(new_kernels, old_kernel_size):
 
 if __name__ == '__main__':
 
-    model = downscale('same', 'Model_24KHz_97%_meanPooling', 'test', False)
+    # same
+    # nearest_neighbor
+    # linear
+    # distance_weighting
+
+    model = downscale('linear', 'A24', 'test', avg_pool_unaffected=True)
 
     X, Y = utils.load_data('Dataframes/Testing12.pickle')
     score = utils.test_model(model, X, Y)
