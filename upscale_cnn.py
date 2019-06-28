@@ -12,7 +12,7 @@ from keras import backend as K
 
 
 
-def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool_unaffected=True):
+def upscale(method: str, old_model_name: str,  avg_pool_unaffected=True):
 
     old_model = utils.load_model('Models/{}.yaml'.format(old_model_name), 'Models/{}.h5'.format(old_model_name))
 
@@ -162,8 +162,35 @@ def upscale(method: str, old_model_name: str, new_model_name: str, avg_pool_unaf
 
         elif type(layer) is keras.layers.pooling.AveragePooling1D:
 
-            pool_size = layer.pool_size[0]
-            new_model.add(layers.AveragePooling1D(pool_size=pool_size))
+            if avg_pool_unaffected is True:
+
+                pool_size = layer.pool_size[0]
+                new_model.add(layers.AveragePooling1D(pool_size=pool_size))
+
+            else:
+
+                if method == 'dilate':
+                    new_kernels = scale_avg_pooling(nodes, [1/2, 0, 1/2, 0])
+
+                elif method == 'nearest_directly':
+                    new_kernels = scale_avg_pooling(nodes, [1/2, 1/2, 1/2, 1/2])
+
+                elif method == 'linear_directly':
+                    new_kernels = scale_avg_pooling(nodes, [1/2, 1/2, 1/2, 1/4])
+
+                elif method == 'inverse_directly':
+                    new_kernels = scale_avg_pooling(nodes, [1/2, 1/2, 1/2, 1/2])
+
+
+                dummy_bias = np.zeros(nodes)
+                new_weights = [utils.get_weights(new_kernels), dummy_bias]
+
+                new_layer = layers.Conv1D(nodes, kernel_size=new_kernels.shape[-1], activation='linear',
+                                          padding='same', strides=2, weights=new_weights)
+                new_model.add(new_layer)
+
+
+
 
         elif type(layer) is keras.layers.Flatten:
 
@@ -1077,6 +1104,14 @@ def pad_zeros(new_kernels, old_kernel_size):
             return new_kernels
 
 
+def scale_avg_pooling(nodes, kernel):
+
+    arr = np.zeros(shape=(nodes, nodes, len(kernel)))
+
+    arr[:][:] = np.array(kernel)
+
+    return arr
+
 
 if __name__ == '__main__':
 
@@ -1093,32 +1128,32 @@ if __name__ == '__main__':
     # linear_directly
     # inverse_directly
 
-    model = upscale('inverse_directly', 'E12', 'test')
+    # model = upscale('inverse_directly', 'E12', 'test')
 
     # SAVE MODEL
     # utils.save_model(model, 'same')
 
     X, Y = utils.load_data('Dataframes/Testing24.pickle')
-    score = utils.test_model(model, X, Y)
-
-    f = open("Directly.txt", "a")
-    f.write('Method: {}, Model: {}, acc: {}%\n'.format('inverse_directly', 'E12', score))
-    print('Method: {}, Model: {}, acc: {}%\n'.format('inverse_directly', 'E12', score))
-    f.close()
+    # score = utils.test_model(model, X, Y)
+    #
+    # f = open("Directly.txt", "a")
+    # f.write('Method: {}, Model: {}, acc: {}%\n'.format('inverse_directly', 'E12', score))
+    # print('Method: {}, Model: {}, acc: {}%\n'.format('inverse_directly', 'E12', score))
+    # f.close()
 
     # 'nearest_directly', 'linear_directly', 'inverse_directly',
 
 
-    # for method in ['dilate']:
-    #     for model_name in ['A12', 'B12', 'C12', 'D12', 'E12']:
-    #
-    #         model = upscale(method, model_name, 'test')
-    #
-    #         score = utils.test_model(model, X, Y)
-    #
-    #         K.clear_session()
-    #
-    #         f = open("Directly.txt", "a")
-    #         f.write('Method: {}, Model: {}, acc: {}%\n'.format(method, model_name, score))
-    #         print('Method: {}, Model: {}, acc: {}%\n'.format(method, model_name, score))
-    #         f.close()
+    for method in ['nearest_directly', 'linear_directly', 'inverse_directly', 'dilate']:
+        for model_name in ['A12', 'B12', 'E12']:
+
+            model = upscale(method, model_name, avg_pool_unaffected=False)
+
+            score = utils.test_model(model, X, Y)
+
+            K.clear_session()
+
+            f = open("Directly_AVG_POOLING.txt", "a")
+            f.write('Method: {}, Model: {}, acc: {}%\n'.format(method, model_name, score))
+            print('Method: {}, Model: {}, acc: {}%\n'.format(method, model_name, score))
+            f.close()

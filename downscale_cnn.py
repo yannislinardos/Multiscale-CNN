@@ -5,7 +5,7 @@ from keras import layers
 import numpy as np
 
 
-def downscale(method: str, old_model_name: str, new_model_name: str, avg_pool_unaffected=False):
+def downscale(method: str, old_model_name: str, avg_pool_unaffected=False):
 
     old_model = utils.load_model('Models/{}.yaml'.format(old_model_name), 'Models/{}.h5'.format(old_model_name))
 
@@ -498,7 +498,7 @@ if __name__ == '__main__':
     # linear
     # distance_weighting
 
-    model = downscale('linear', 'A24', 'test', avg_pool_unaffected=True)
+    model = downscale('linear', 'A24', avg_pool_unaffected=True)
 
     X, Y = utils.load_data('Dataframes/Testing12.pickle')
     score = utils.test_model(model, X, Y)
