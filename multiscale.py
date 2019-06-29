@@ -8,7 +8,7 @@ from tqdm import tqdm
 def get_prolongation(__method: str, __coarse_scale: int, __fine_scale: int, __zero_padding: bool, __kernel_size=0) -> np.ndarray:
 
     __rows, __columns = __fine_scale, __coarse_scale
-    __matrix = np.zeros([__rows, __columns], dtype='float16')
+    __matrix = np.zeros([__rows, __columns])
     __ratio = int(__fine_scale / __coarse_scale)
 
     if __method == 'nearest_neighbor':
