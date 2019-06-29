@@ -12,7 +12,7 @@ from keras import backend as K
 
 
 
-def upscale(method: str, old_model_name: str,  avg_pool_unaffected=True):
+def upscale(method: str, old_model_name: str, avg_pool_unaffected=True):
 
     old_model = utils.load_model('Models/{}.yaml'.format(old_model_name), 'Models/{}.h5'.format(old_model_name))
 
@@ -1141,10 +1141,10 @@ if __name__ == '__main__':
     # print('Method: {}, Model: {}, acc: {}%\n'.format('inverse_directly', 'E12', score))
     # f.close()
 
-    # 'nearest_directly', 'linear_directly', 'inverse_directly',
+    # 'nearest_directly', 'linear_directly', 'inverse_directly', 'A12', 'B12', 'E12'
 
 
-    for method in ['nearest_directly', 'linear_directly', 'inverse_directly', 'dilate']:
+    for method in ['nearest_directly', 'linear_directly', 'inverse_directly','dilate']:
         for model_name in ['A12', 'B12', 'E12']:
 
             model = upscale(method, model_name, avg_pool_unaffected=False)
